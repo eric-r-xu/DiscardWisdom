@@ -1,53 +1,50 @@
-# DiscardWisdom - HK Mahjong Discard Suggestor
+# DiscardWisdom - HK Mahjong 🀄 Discard Suggestor 
 
-🀀		&#x1F000;
-🀁	Mahjong Tile South Wind	&#x1F001;
-🀂	Mahjong Tile West Wind	&#x1F002;
-🀃	Mahjong Tile North Wind	&#x1F003;
-🀄	Mahjong Tile Red Dragon	&#x1F004;
-🀅	Mahjong Tile Green Dragon	&#x1F005;
-🀆	Mahjong Tile White Dragon	&#x1F006;
-🀇	Mahjong Tile One Of Characters	&#x1F007;
-🀈	Mahjong Tile Two Of Characters	&#x1F008;
-🀉	Mahjong Tile Three Of Characters	&#x1F009;
-🀊	Mahjong Tile Four Of Characters	&#x1F00A;
-🀋	Mahjong Tile Five Of Characters	&#x1F00B;
-🀌	Mahjong Tile Six Of Characters	&#x1F00C;
-🀍	Mahjong Tile Seven Of Characters	&#x1F00D;
-🀎	Mahjong Tile Eight Of Characters	&#x1F00E;
-🀏	Mahjong Tile Nine Of Characters	&#x1F00F;
-🀐	Mahjong Tile One Of Bamboos	&#x1F010;
-🀑	Mahjong Tile Two Of Bamboos	&#x1F011;
-🀒	Mahjong Tile Three Of Bamboos	&#x1F012;
-🀓	Mahjong Tile Four Of Bamboos	&#x1F013;
-🀔	Mahjong Tile Five Of Bamboos	&#x1F014;
-🀕	Mahjong Tile Six Of Bamboos	&#x1F015;
+## Coding Project for Practice
 
-Symbol	Mahjong Tile Name	Unicode Number
-🀖	Mahjong Tile Seven Of Bamboos	&#x1F016;
-🀗	Mahjong Tile Eight Of Bamboos	&#x1F017;
-🀘	Mahjong Tile Nine Of Bamboos	&#x1F018;
-🀙	Mahjong Tile One Of Circles	&#x1F019;
-🀚	Mahjong Tile Two Of Circles	&#x1F01A;
-🀛	Mahjong Tile Three Of Circles	&#x1F01B;
-🀜	Mahjong Tile Four Of Circles	&#x1F01C;
-🀝	Mahjong Tile Five Of Circles	&#x1F01D;
-🀞	Mahjong Tile Six Of Circles	&#x1F01E;
-🀟	Mahjong Tile Seven Of Circles	&#x1F01F;
-🀠	Mahjong Tile Eight Of Circles	&#x1F020;
-🀡	Mahjong Tile Nine Of Circles	&#x1F021;
-🀢	Mahjong Tile Plum	&#x1F022;
-🀣	Mahjong Tile Orchid	&#x1F023;
-🀤	Mahjong Tile Bamboo	&#x1F024;
-🀥	Mahjong Tile Chrysanthemum	&#x1F025;
-🀦	Mahjong Tile Spring	&#x1F026;
-🀧	Mahjong Tile Summer	&#x1F027;
-🀨	Mahjong Tile Autumn	&#x1F028;
-🀩	Mahjong Tile Winter	&#x1F029;
-🀪	Mahjong Tile Joker	&#x1F02A;
-🀫	Mahjong Tile Back	&#x1F02B
+🀀
+🀁	
+🀂	
+🀃	
+🀅	
+🀆	
+🀇	
+🀈	
+🀉	
+🀊	
+🀋	
+🀌	
+🀍	
+🀎	
+🀏	
+🀐	
+🀑	
+🀒	
+🀓	
+🀔	
+🀕	
+🀖	
+🀗	
+🀘	
+🀙	
+🀚	
+🀛	
+🀜	
+🀝	
+🀞	
+🀟	
+🀠	
+🀡	
+🀢	
+🀣	
+🀤	
+🀥	
+🀦	
+🀧	
+🀨	
+🀩	
 
-This Python script provides functionality for checking Mahjong hands based on predefined rules and suggestions for potential discards to improve the hand.
+This Python script provides functionality for suggesting tiles to discard in Hong Kong Mahjong hands based to increase probability of any winning hand (0 fan +)
 
 ## Features
 
