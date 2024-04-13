@@ -1,6 +1,6 @@
 # DiscardWisdom - HK Mahjong Discard Suggestor
 
-🀀	Mahjong Tile East Wind	&#x1F000;
+🀀		&#x1F000;
 🀁	Mahjong Tile South Wind	&#x1F001;
 🀂	Mahjong Tile West Wind	&#x1F002;
 🀃	Mahjong Tile North Wind	&#x1F003;
