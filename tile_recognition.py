@@ -1,24 +1,29 @@
+import cv2
+import numpy as np
+import tkinter as tk
+from tkinter import filedialog
+from collections import defaultdict
 from IPython.display import display
 import PIL.Image as Image
 import io
-import cv2
-import numpy as np
+import os
 
-def show_image(img):
-    """Convert an image matrix into a displayable image in Jupyter Notebook."""
-    is_success, buffer = cv2.imencode(".png", img)
+
+def show_image(img, scale):
+    """Resize and display an image in Jupyter Notebook."""
+    resized_img = cv2.resize(
+        img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA
+    )
+    is_success, buffer = cv2.imencode(".png", resized_img)
     if not is_success:
         raise ValueError("Failed to convert the image to PNG buffer")
     io_buf = io.BytesIO(buffer)
     display(Image.open(io_buf))
 
+
 def find_and_print_locations(template_path, image_path):
-    """
-    This function finds, prints, and displays each location of the template image in the target image with highlighted matches,
-    considering rotations and scaling of the template.
-    Highlights are shown in yellow with 30% opacity.
-    """
-    image = cv2.imread(image_path)  # Read image in color
+    """Find, print, and display each location of the template image in the target image with different scaling."""
+    image = cv2.imread(image_path)
     if image is None:
         print("Error: Could not read the target image.")
         return
@@ -28,41 +33,96 @@ def find_and_print_locations(template_path, image_path):
         print("Error: Could not read the template image.")
         return
 
-    angles = [0, 90, -90]  # Degrees of rotation
-    scales = [1, 0.5]  # 50% original size
+    show_image(original_template, 0.5)  # Show the original template scaled down by 50%
 
-    for angle in angles:
-        M = cv2.getRotationMatrix2D((original_template.shape[1] / 2, original_template.shape[0] / 2), angle, 1)
-        rotated_template = cv2.warpAffine(original_template, M, (original_template.shape[1], original_template.shape[0]))
+    scales = [
+        2.8,
+        2.6,
+        2.4,
+        2.2,
+        2.0,
+        1.8,
+        1.6,
+        1.4,
+        1.2,
+        1,
+        0.8,
+        0.6,
+        0.4
+    ]  # Different scales to try
 
-        for scale in scales:
+    locations = 0
+    match_mask = np.zeros(image.shape[:2], dtype=bool)
 
-            resized_template = cv2.resize(rotated_template, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-            if resized_template.shape[0] > image.shape[0] or resized_template.shape[1] > image.shape[1]:
-                continue  # Skip if resized template is larger than the image
+    for scale in scales:
+        resized_template = cv2.resize(
+            original_template, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA
+        )
+        result = cv2.matchTemplate(
+            cv2.cvtColor(image, cv2.COLOR_BGR2GRAY),
+            resized_template,
+            cv2.TM_CCOEFF_NORMED,
+        )
+        threshold = 0.84
+        matches = np.where(result >= threshold)
 
-            result = cv2.matchTemplate(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), resized_template, cv2.TM_CCOEFF_NORMED)
-            threshold = 0.8
-            matches = np.where(result >= threshold)
-            match_mask = np.zeros(image.shape[:2], dtype=bool)  # Create a mask for the whole image
+        for y, x in zip(*matches):
+            end_y, end_x = y + resized_template.shape[0], x + resized_template.shape[1]
 
-            for y, x in zip(*matches):
-                end_y, end_x = y + resized_template.shape[0], x + resized_template.shape[1]
-                
-                # Check if the area for this match is already covered
-                if np.any(match_mask[y:end_y, x:end_x]):
-                    continue  # Skip this match if any part of it is already covered
+            if np.any(match_mask[y:end_y, x:end_x]):
+                continue  # Skip overlapping matches
 
-                # Mark this area as matched in the mask
-                match_mask[y:end_y, x:end_x] = True
+            match_mask[y:end_y, x:end_x] = True
 
-                print(f"Match found at: (y, x) = ({y}, {x}), angle = {angle}°, scale = {int(scale*100)}%")
-                highlight_image = image.copy()
-                cv2.rectangle(highlight_image, (x, y), (end_x, end_y), (0, 255, 255), -1)  # Yellow fill
-                cv2.addWeighted(highlight_image, 0.7, image, 0.3, 0, highlight_image)  # 30% opacity
-                show_image(highlight_image)  # Display each highlighted image
+            highlight_image = image.copy()
+            cv2.rectangle(highlight_image, (x, y), (end_x, end_y), (0, 255, 255), -1)
+            cv2.addWeighted(highlight_image, 0.7, image, 0.3, 0, highlight_image)
+            # show_image(highlight_image, 0.3)  # Display the match scaled down by 50%
+            locations += 1
+        if locations > 0:
+            print(f"Scale {scale*100}% found {locations} matches")
 
-# Example usage
-template_path = "./tiles/5d.jpg"
-image_path = "screenshot.jpg"
-find_and_print_locations(template_path, image_path)
+    if locations > 4:
+        raise ValueError("ERROR: more than 4 matches found!")
+    return locations
+
+
+# Paths and execution code
+screenshot_path = "/Users/ericrxu/Jupyter/screenshot_2.PNG"
+template_dir = "/Users/ericrxu/Jupyter/tiles/"
+template_files = []
+
+# Use os.walk to find all files in directory and subdirectories
+for root, dirs, files in os.walk(template_dir):
+    for file in files:
+        if file.endswith(".PNG") or file.endswith(".png"):
+            # Append the full path of the file
+            template_files.append(os.path.join(root, file))
+
+tiles_found = defaultdict(int)
+
+prev = ""
+for template_path in template_files:
+    if prev != os.path.basename(os.path.dirname(template_path)):
+        try:
+            print(f"total {prev} tiles found = {tiles_found[prev]}")
+        except:
+            pass
+        print(
+            f"---------------------{os.path.basename(os.path.dirname(template_path))}---------------------"
+        )
+        prev = os.path.basename(os.path.dirname(template_path))
+    found_tiles = find_and_print_locations(template_path, screenshot_path)
+
+    if found_tiles > 0:
+        print(f"Found tiles={found_tiles}")
+    tiles_found[os.path.basename(os.path.dirname(template_path))] += found_tiles
+
+try:
+    print(f"total {prev} tiles found = {tiles_found[prev]}")
+except:
+    pass
+
+for k,v in tiles_found.items():
+    print(f"{k} tiles = {v}")
+print("Made it to the bitter end!")
