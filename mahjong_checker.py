@@ -99,16 +99,15 @@ class MahjongHandChecker:
                         self.tiles[f"{num + i}{suit}"] += 1
         return False
 
-    def suggest_discard(self):
-        potential_discards = {}
+    def discard_wisdom(self):
+        discard_scores = {}
         for tile in self.tiles:
             if self.tiles[tile] > 0 and tile[-1] != 'f':
                 original_count = self.tiles[tile]
                 self.tiles[tile] -= 1
-                potential_discards[tile] = self.evaluate_hand_potential()
+                discard_scores[tile] = self.evaluate_hand_potential()
                 self.tiles[tile] = original_count
-        least_useful_tile = min(potential_discards, key=potential_discards.get, default=None)
-        return least_useful_tile, potential_discards[least_useful_tile] if least_useful_tile else None, potential_discards
+        return discard_scores
 
     def evaluate_hand_potential(self):
         score = 0
