@@ -46,7 +46,7 @@
 
 
 
-- The associated Google Colab notebook utilizes game screenshots from the Hong Kong Mahjong Club mobile app ([iOS](https://apps.apple.com/us/app/hong-kong-mahjong-club/id488514298), [Android](https://play.google.com/store/apps/details?id=com.recax.mjclub&hl=en_US)) for tile image recognition. 
+- The associated [Google Colab notebook](https://github.com/eric-r-xu/DiscardWisdom/blob/main/DiscardWisdom.ipynb) utilizes game screenshots from the Hong Kong Mahjong Club mobile app ([iOS](https://apps.apple.com/us/app/hong-kong-mahjong-club/id488514298), [Android](https://play.google.com/store/apps/details?id=com.recax.mjclub&hl=en_US)) for tile image recognition. 
 - It analyzes all discarded tiles and calculates a hand score after each discard. 
 - The higher the hand score from each discarded tile, the less useful the algorithm predicts it is for maximizing your win and thus should be discarded from your hand.
 
