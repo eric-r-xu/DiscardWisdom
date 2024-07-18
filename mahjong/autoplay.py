@@ -8,12 +8,25 @@ import numpy as np
 import pyautogui
 
 
+def shuffle_dict_with_fixed_first(d, fixed_key):
+    # Ensure the fixed_key is in the dictionary
+    if fixed_key not in d:
+        raise KeyError(f"The key {fixed_key} is not in the dictionary.")
+    fixed_item = {fixed_key: d[fixed_key]}
+    remaining_items = list(d.items())
+    remaining_items.remove((fixed_key, d[fixed_key]))
+    random.shuffle(remaining_items)
+    shuffled_dict = {**fixed_item, **dict(remaining_items)}
+
+    return shuffled_dict
+
+
 # Holds constants and configuration settings.
 class Config:
     NO_MOTION_SEC_THRESHOLD = 0.6
     NO_MOTION_CLICK_THRESHOLD = 0.2
     SAMPLING_RATE_FPS = 10
-    MINUTES_BEFORE_STOPPING = 45
+    MINUTES_BEFORE_STOPPING = 100
     COORDINATES = {
         "D1": (259, 683),
         "D2": (335, 683),
@@ -32,8 +45,10 @@ class Config:
         "next_game": (1072, 790),
         "accept": (1288, 567),
         "reject": (1396, 561),
-        "escape_ad": (1447, 241),
-        "next_game": (742, 568),
+        "exit_ad": (1447, 241),
+        "draw_game": (742, 568),
+        "unpause": (653, 748),
+        "exit_ad2": (1443, 249),
     }
 
 
@@ -67,7 +82,7 @@ class ClickMotionDetector(MotionDetector):
     def detect_after_click(self, frame2, location):
         pyautogui.moveTo(location)
         pyautogui.click()
-        print(f"Clicked at location: {location}")
+        # print(f"Clicked at location: {location}")
         time.sleep(Config.NO_MOTION_CLICK_THRESHOLD)
         frame3 = ScreenshotCapturer.capture()
         return self.detect(frame2, frame3)
@@ -114,9 +129,10 @@ class MotionDetectionScript:
                     filename = f"no_motion_screenshot_{int(time.time())}.png"
                     self.save_screenshot(frame2, filename)
 
-                    items = list(Config.COORDINATES.items())
-                    random.shuffle(items)
-                    for tile_name, coordinates in items:
+                    shuffled_dict = shuffle_dict_with_fixed_first(
+                        Config.COORDINATES, "exit_ad2"
+                    )
+                    for tile_name, coordinates in shuffled_dict.items():
                         if self.click_motion_detector.detect_after_click(
                             frame2, coordinates
                         ):
