@@ -10,17 +10,17 @@ import pyautogui
 
 # Holds constants and configuration settings.
 class Config:
-    NO_MOTION_SEC_THRESHOLD = 1
-    NO_MOTION_CLICK_THRESHOLD = 0.5
-    SAMPLING_RATE_FPS = 5
+    NO_MOTION_SEC_THRESHOLD = 0.6
+    NO_MOTION_CLICK_THRESHOLD = 0.2
+    SAMPLING_RATE_FPS = 10
     MINUTES_BEFORE_STOPPING = 45
     COORDINATES = {
-        "D1": (259,683),
+        "D1": (259, 683),
         "D2": (335, 683),
         "D3": (411, 683),
         "D4": (487, 683),
         "D5": (563, 683),
-        "D6": (639,683),
+        "D6": (639, 683),
         "D7": (715, 683),
         "D8": (791, 683),
         "D9": (867, 683),
@@ -32,6 +32,8 @@ class Config:
         "next_game": (1072, 790),
         "accept": (1288, 567),
         "reject": (1396, 561),
+        "escape_ad": (1447, 241),
+        "next_game": (742, 568),
     }
 
 
