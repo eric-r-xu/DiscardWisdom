@@ -59,7 +59,7 @@ Please Help Validate the Hong Kong Mahjong Discard Scoring System!  🙏🙏🙏
 [link](https://forms.gle/p1MEc6aR4XaoHGoT8)
 
 ---
----
+
 
 
 ### Key Features/Notes
@@ -72,6 +72,7 @@ __Automation with Autoplay Functionality__: Includes a script (mahjong/autoplay.
 
 __Platform__: Uses Jupyter and Google Colab notebooks for public execution and sharing.
 
+---
 
 This project showcases proficiency in image recognition, algorithmic strategy, and automation, providing a robust tool for Mahjong enthusiasts to improve their game.
 
