@@ -53,10 +53,10 @@ __Overview__: Ongoing pet project to create a tool/trainer to build intuition an
 
 
 
-## Anonymous Google Survey From Tool 
+## [Anonymous Google Survey From Tool](https://forms.gle/p1MEc6aR4XaoHGoT8)
 
-Please Help Validate the Hong Kong Mahjong Discard Scoring System!  🙏🙏🙏🙏
-[link](https://forms.gle/p1MEc6aR4XaoHGoT8)
+[Please Help Validate the Hong Kong Mahjong Discard Scoring System!](https://forms.gle/p1MEc6aR4XaoHGoT8)  🙏🙏🙏🙏
+
 
 ---
 
