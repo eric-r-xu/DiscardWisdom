@@ -1,58 +1,80 @@
+
 import os
-import random
+import sys
 import time
 from datetime import datetime
-
+from io import StringIO
+import random
 import cv2
 import numpy as np
 import pyautogui
+from pync import Notifier
+
+from image_utils import check_for_template_match
 
 
-def shuffle_dict_with_fixed_first(d, fixed_key):
-    # Ensure the fixed_key is in the dictionary
-    if fixed_key not in d:
-        raise KeyError(f"The key {fixed_key} is not in the dictionary.")
-    fixed_item = {fixed_key: d[fixed_key]}
-    remaining_items = list(d.items())
-    remaining_items.remove((fixed_key, d[fixed_key]))
-    random.shuffle(remaining_items)
-    shuffled_dict = {**fixed_item, **dict(remaining_items)}
-
-    return shuffled_dict
-
-
-# Holds constants and configuration settings.
 class Config:
-    NO_MOTION_SEC_THRESHOLD = 0.6
-    NO_MOTION_CLICK_THRESHOLD = 0.2
-    SAMPLING_RATE_FPS = 10
-    MINUTES_BEFORE_STOPPING = 100
+    NO_MOTION_SEC_THRESHOLD = 0.05
+    HEARTBEAT_SEC = 60  # time between '...'
+    NO_MOTION_CLICK_THRESHOLD = 0.1
+    SAMPLING_RATE_FPS = 100
+    MINUTES_BEFORE_STOPPING = 500
     COORDINATES = {
-        "D1": (259, 683),
-        "D2": (335, 683),
-        "D3": (411, 683),
-        "D4": (487, 683),
-        "D5": (563, 683),
-        "D6": (639, 683),
-        "D7": (715, 683),
-        "D8": (791, 683),
-        "D9": (867, 683),
-        "D10": (943, 683),
-        "D11": (1019, 683),
-        "D12": (1095, 683),
-        "D13": (1171, 683),
-        "wall_tile": (1279, 680),
-        "next_game": (1072, 790),
-        "accept": (1288, 567),
-        "reject": (1396, 561),
-        "exit_ad": (1447, 241),
-        "draw_game": (742, 568),
-        "unpause": (653, 748),
-        "exit_ad2": (1443, 249),
+        "D1": (216, 541),
+        "D2": (279, 541),
+        "D3": (342, 541),
+        "D4": (406, 541),
+        "D5": (469, 541),
+        "D6": (532, 541),
+        "D7": (596, 541),
+        "D8": (659, 541),
+        "D9": (722, 541),
+        "D10": (786, 541),
+        "D11": (849, 541),
+        "D12": (912, 541),
+        "D13": (975, 541),
+        "wall_tile": (1065, 539),
+        "next_game": (893, 626),
+        "accept": (1073, 449),
+        "reject": (1163, 444),
+        "exit_ad": (1205, 191),
+        "draw_game": (618, 450),
+        "unpause": (544, 592),
+        "exit_ad2": (1202, 197),
+        "exit_ad3": (1243, 141),
+        "exit_ad4": (668, 604),
+        "x": (1118, 200),
+        "close_ad": (1198, 147)
+    }
+    # Add search ranges for templates for search efficiency and precision
+    TEMPLATE_RANGES = {
+        "NextGame": {"x_min": 1720, "y_min": 1220},
+        "Pong": {"x_min": 1990, "y_min": 820},
+        "Chow": {"x_min": 1930, "y_min": 820},
     }
 
 
-# Encapsulates screenshot capturing functionality.
+class Utils:
+    @staticmethod
+    def shuffle_dict_with_fixed_keys(d, fixed_keys):
+        # shuffles dictionary keys with fixed keys at the beginning
+        if not all(key in d for key in fixed_keys):
+            raise KeyError("One or more fixed keys are not in the dictionary.")
+
+        fixed_items = [(key, d[key]) for key in fixed_keys]
+        remaining_items = [
+            (key, value) for key, value in d.items() if key not in fixed_keys
+        ]
+
+        random.shuffle(fixed_items)
+        random.shuffle(remaining_items)
+
+        shuffled_dict = {key: value for key, value in fixed_items}
+        shuffled_dict.update({key: value for key, value in remaining_items})
+
+        return shuffled_dict
+
+
 class ScreenshotCapturer:
     @staticmethod
     def capture():
@@ -61,34 +83,52 @@ class ScreenshotCapturer:
         return cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
 
 
-# Handles motion detection between two frames.
 class MotionDetector:
-    def __init__(self, threshold=30):
+    def __init__(self, threshold=50):
         self.threshold = threshold
 
     def detect(self, frame1, frame2):
+        # omit top and bottom black border regions as well as ads in motion detection
+        frame1[0:200, :, :] = 0
+        frame2[0:200, :, :] = 0
+        frame1[1190:, 0:1150, :] = 0
+        frame2[1190:, 0:1150, :] = 0
+        
         gray1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
         gray2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+
         diff = cv2.absdiff(gray1, gray2)
-        _, diff_thresh = cv2.threshold(diff, self.threshold, 255, cv2.THRESH_BINARY)
+        _, diff_thresh = cv2.threshold(
+            diff, self.threshold, 255, cv2.THRESH_BINARY)
         contours, _ = cv2.findContours(
             diff_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
         return len(contours) > 0
 
+    @staticmethod
+    def show_image(image, title="Image"):
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(10, 5))
+        plt.imshow(image, cmap="gray")
+        plt.title(title)
+        plt.axis("off")
+        plt.show()
 
-# Inherits from MotionDetector and adds functionality for detecting motion after clicking a specified location.
+
 class ClickMotionDetector(MotionDetector):
-    def detect_after_click(self, frame2, location):
+    def detect_after_click(self, location):
+        frame1 = ScreenshotCapturer.capture()
         pyautogui.moveTo(location)
+        msg = f"Moved mouse to {location}"
+        # print('#########################################')
+        # print('    ', msg)
+        # print('#########################################')
         pyautogui.click()
-        # print(f"Clicked at location: {location}")
         time.sleep(Config.NO_MOTION_CLICK_THRESHOLD)
-        frame3 = ScreenshotCapturer.capture()
-        return self.detect(frame2, frame3)
+        frame2 = ScreenshotCapturer.capture()
+        return self.detect(frame1, frame2)
 
 
-# Orchestrates the main logic, managing the state, and handles directory creation and screenshot saving.
 class MotionDetectionScript:
     def __init__(self):
         self.motion_detector = MotionDetector()
@@ -98,7 +138,6 @@ class MotionDetectionScript:
         self.screenshot_dir = self.create_screenshot_directory()
 
     def create_screenshot_directory(self):
-        # create a directory of format `YYYYMMDDHHMM`
         timestamp = datetime.now().strftime("%Y%m%d%H%M")
         dir_path = os.path.join("auto_screenshots", timestamp)
         os.makedirs(dir_path, exist_ok=True)
@@ -107,11 +146,106 @@ class MotionDetectionScript:
     def save_screenshot(self, frame, filename):
         full_path = os.path.join(self.screenshot_dir, filename)
         cv2.imwrite(full_path, frame)
-        print(f"Screenshot saved as {full_path}")
+        msg = f"Screenshot saved @ {full_path}"
+        print("\n\n------------------------------------------------")
+        print(msg)
+        Notifier.notify(msg)
+        return full_path
+
+    def handle_no_motion(self, frame):
+        coordinates_to_click_first = [
+            "exit_ad4", "exit_ad3", "exit_ad", "exit_ad2", "x", "close_ad"]
+        filename = f"X{int(time.time())}.png"
+        full_path = self.save_screenshot(frame, filename)
+
+        templates = {
+            "ChowSelection": (
+                "wall_tile",
+                "D3",
+                "D4",
+                "D5",
+                "D6",
+                "D7",
+                "D8",
+                "D9",
+                "D10",
+                "D11",
+                "D12",
+                "D13",
+            ),
+            "KongPong": ("accept", "reject"),
+            "PongChow": ("accept", "reject"),
+            "NextGame": ("next_game",),
+            "Pong": ("accept", "reject"),
+            "Chow": ("accept", "reject"),
+            "Ad": ("x", "close_ad"),
+            "Kong": ("accept", "reject"),
+            "DetermineSelfPick": ("next_game",),
+            "DetermineWinner": ("next_game",),
+            "DetermineWinnerFan": ("next_game",),
+            "Draw": ("draw_game",),
+        }
+        found_any_match = 0
+        for template, coords in templates.items():
+            template_range = Config.TEMPLATE_RANGES.get(template, {})
+            template_dir = os.path.join(os.getcwd(), "templates", template)
+
+            for template_file in sorted(os.listdir(template_dir)):
+                template_dir.split('/')[-1]
+                msg = f"{template_dir.split('/')[-1]}"
+
+
+
+                if template_file.lower().endswith(".png"):
+                    template_path = os.path.join(template_dir, template_file)
+                    template_name_msg = f"{template_file.split('/')[-1]}"
+                    # print('        ', template_name_msg)
+                    match_found, min_x, max_x, min_y, max_y, threshold = (
+                        check_for_template_match(
+                            full_path, template_path, 0.97, template_range
+                        )
+                    )
+                    if match_found == True:
+                        found_any_match = 1
+                        self.save_screenshot(frame, f"{template}_" + filename)
+                        msg = f"{template} ({template_name_msg}) found at (x range, y range) = ({min_x} to {max_x}, {min_y} to {max_y}) at {threshold}!"
+                        print('#########################################')
+                        print('        ', msg)
+                        print('#########################################')
+                        Notifier.notify(msg)
+                        coordinates_to_click_first = coords
+                        
+                    else:
+                        if min_x is not None:
+                            msg = f"{template} found at (x range, y range) = ({min_x} to {max_x}, {min_y} to {max_y}) at {threshold}!"
+
+                            print('            ', msg)
+
+        if found_any_match == 1:
+            msg = f"removing {full_path}"
+            print('        ', msg)
+            os.remove(full_path)
+            
+
+        shuffled_dict = Utils.shuffle_dict_with_fixed_keys(
+            Config.COORDINATES, coordinates_to_click_first
+        )
+
+        for tile_name, coordinates in shuffled_dict.items():
+            if self.click_motion_detector.detect_after_click(coordinates):
+                msg = f"Motion detected after clicking {tile_name} at {coordinates}"
+                Notifier.notify(msg)
+                print('#########################################')
+                print('    ', msg)
+                print('#########################################')
+                break
+        time.sleep(1 / Config.SAMPLING_RATE_FPS)
+        self.no_motion_start_time = None
 
     def run(self):
         frame1 = ScreenshotCapturer.capture()
         time.sleep(1 / Config.SAMPLING_RATE_FPS)
+        last_heartbeat = time.time()
 
         while True:
             frame2 = ScreenshotCapturer.capture()
@@ -119,6 +253,8 @@ class MotionDetectionScript:
 
             if motion_detected:
                 self.no_motion_start_time = None
+                # filename = f"motion_X{int(time.time())}.png"
+                # self.save_screenshot(frame2, filename)
             else:
                 if self.no_motion_start_time is None:
                     self.no_motion_start_time = time.time()
@@ -126,28 +262,19 @@ class MotionDetectionScript:
                     time.time() - self.no_motion_start_time
                     >= Config.NO_MOTION_SEC_THRESHOLD
                 ):
-                    filename = f"no_motion_screenshot_{int(time.time())}.png"
-                    self.save_screenshot(frame2, filename)
-
-                    shuffled_dict = shuffle_dict_with_fixed_first(
-                        Config.COORDINATES, "exit_ad2"
-                    )
-                    for tile_name, coordinates in shuffled_dict.items():
-                        if self.click_motion_detector.detect_after_click(
-                            frame2, coordinates
-                        ):
-                            print(f"Motion detected after clicking {tile_name}")
-                            break
-                    time.sleep(1 / Config.SAMPLING_RATE_FPS)
-                    self.no_motion_start_time = None
+                    self.handle_no_motion(frame2)
 
             frame1 = frame2
 
-            if time.time() - self.start_time >= Config.MINUTES_BEFORE_STOPPING * 60:
-                print(
-                    f"{Config.MINUTES_BEFORE_STOPPING} minutes have passed. Stopping the script."
-                )
+            if ((time.time() - self.start_time) >= Config.MINUTES_BEFORE_STOPPING * 60):
+                msg = f"{Config.MINUTES_BEFORE_STOPPING} minutes have passed. Stopping the script."
+                print(msg)
                 break
+
+            if ((time.time() - last_heartbeat) >= Config.HEARTBEAT_SEC):
+                msg = f'heartbeat - {time.time()}'
+                print(msg)
+                last_heartbeat = time.time()
 
             time.sleep(1 / Config.SAMPLING_RATE_FPS)
 
@@ -155,3 +282,6 @@ class MotionDetectionScript:
 if __name__ == "__main__":
     script = MotionDetectionScript()
     script.run()
+    msg = f"Reached timeout {Config.MINUTES_BEFORE_STOPPING} minutes"
+    print(msg)
+    Notifier.notify(msg)
