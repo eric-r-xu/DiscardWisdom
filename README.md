@@ -72,6 +72,11 @@ __Automation with Autoplay Functionality__: Includes a script (mahjong/autoplay.
 
 __Platform__: Uses Jupyter and Google Colab notebooks for public execution and sharing.
 
+
+
+
+![HK Mahjong Autoplay Decision Tree Flow Diagram Schematic](hkmj_autoplay_decision_tree.png)
+
 ---
 
 This project showcases proficiency in image recognition, algorithmic strategy, and automation, providing a robust tool for Mahjong enthusiasts to improve their game.
