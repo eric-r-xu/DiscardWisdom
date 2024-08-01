@@ -3,7 +3,7 @@
 1. in one terminal window, run
 
 ```zsh
-cd /Users/ericxu/Documents/Jupyter/mahjong;conda activate myenv;ts=$(date +%s);nohup python autoplay_v7.py >> /logs/output_${ts}.log 2>&1 &
+cd /Users/ericxu/Documents/Jupyter/mahjong;conda activate myenv;ts=$(date +%s);nohup python autoplay_v7.py >> logs/output_${ts}.log 2>&1 &
 ```
 
 2. on an android mobile device (tested on google pixel 8 pro), open the [Hong Kong Mahjong Club App](https://play.google.com/store/apps/details?id=com.pvella.mahjong&hl=en_US) and start a game
