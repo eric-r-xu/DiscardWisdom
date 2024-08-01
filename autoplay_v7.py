@@ -8,6 +8,7 @@ import numpy as np
 import pyautogui
 from pync import Notifier
 from collections import deque, OrderedDict, defaultdict
+from PIL import UnidentifiedImageError
 
 
 # Flow Schematic #################################################################
@@ -15,7 +16,7 @@ from collections import deque, OrderedDict, defaultdict
 
 
 class Config:
-    SAMPLING_RATE_FPS = 100.            # (frames/sec)
+    SAMPLING_RATE_FPS = 120.            # (frames/sec)
     TIME_LIMIT = 30000                  # seconds
     NO_MOTION_THRESHOLD = 0.5           # seconds
     NO_MOTION_CLICK_THRESHOLD = 0.1     # seconds
@@ -36,6 +37,8 @@ class Config:
         "D2": (265, 540),
         "D1": (200, 540),
         "accept": (1100, 430),
+        "accept_left": (980, 430),
+        "x2": (1241, 151),
         "x": (1118, 200),
         "close_ad": (1198, 147),
         "exit_ad": (1205, 191),
@@ -46,12 +49,12 @@ class Config:
         "draw_game": (618, 450),
     }
     YOUR_TURN_CLICK_COORDINATES, OTHER_CLICK_COORDINATES = OrderedDict(), OrderedDict()
-    YOUR_TURN_CLICK_ORDER = ['reject', 'wall_tile', 'D13', 'D12', 'D11',
-                             'D10', 'D9', 'D8', 'D7', 'D6', 'D5', 'D4', 'D3', 'D2', 'D1', 'accept']
+    YOUR_TURN_CLICK_ORDER = ['accept', 'accept_left', 'reject', 'wall_tile', 'D13', 'D12', 'D11',
+                             'D10', 'D9', 'D8', 'D7', 'D6', 'D5', 'D4', 'D3', 'D2', 'D1']
     for k in YOUR_TURN_CLICK_ORDER:
         YOUR_TURN_CLICK_COORDINATES[k] = CLICK_COORDINATES[k]
-    OTHER_CLICK_ORDER = ['x', 'close_ad', 'exit_ad', 'exit_ad2',
-                         'exit_ad3', 'exit_ad4', 'next_game', 'draw_game']
+    OTHER_CLICK_ORDER = ['x2', 'x', 'close_ad', 'exit_ad', 'exit_ad2',
+                         'exit_ad3', 'exit_ad4', 'next_game']
     OTHER_CLICK_ORDER = OTHER_CLICK_ORDER + YOUR_TURN_CLICK_ORDER
     for k in OTHER_CLICK_ORDER:
         OTHER_CLICK_COORDINATES[k] = CLICK_COORDINATES[k]
@@ -92,7 +95,6 @@ class Utils:
         f = frame[y_min_boundary:y_max_boundary, x_min_boundary:x_max_boundary]
         fg = cv2.cvtColor(f, cv2.COLOR_BGR2GRAY)
 
-        # TEMPLATE
         folder_path = f'/Users/ericxu/Documents/Jupyter/mahjong/templates/{type}/'
         png_files = [f for f in os.listdir(folder_path) if f.endswith('.png')]
 
@@ -131,9 +133,18 @@ class Utils:
 class ScreenshotCapturer:
     @staticmethod
     def capture():
-        screenshot = pyautogui.screenshot()
-        screenshot_np = np.array(screenshot)
-        return cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
+        try:
+            screenshot = pyautogui.screenshot()
+            screenshot_np = np.array(screenshot)
+            return cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
+        except UnidentifiedImageError as e:
+            print("Screenshot capture failed: Unidentified image error.")
+            time.sleep(5)  # Wait a moment before retrying
+            return None
+        except Exception as e:
+            print(f"Screenshot capture failed: {e}")
+            time.sleep(5)  # Wait a moment before retrying
+            return None
 
 
 class GameFrameQueue:
@@ -175,7 +186,7 @@ class GameFrameQueue:
 
 
 class MotionDetector:
-    def __init__(self, threshold=40):
+    def __init__(self, threshold=30):
         self.threshold = threshold
 
     def detect(self, frame1, frame2, type='GameScreen'):
@@ -184,6 +195,7 @@ class MotionDetector:
         f2 = frame2.copy()
 
         if type == 'GameScreen':
+            threshold = 15
             f2[0:1190, :, :] = 0
             f2[:, 1450:, :] = 0
             f2[1190:1400, 0:1150, :] = 0
@@ -215,7 +227,7 @@ class ClickMotionDetector(MotionDetector):
         pyautogui.moveTo(location)
         msg = f"Moved mouse to {location}"
         pyautogui.click()
-        time.sleep(Config.NO_MOTION_CLICK_THRESHOLD)
+        # time.sleep(Config.NO_MOTION_CLICK_THRESHOLD)
         frame2 = ScreenshotCapturer.capture()
         return self.detect(frame1, frame2, type=type)
 
@@ -248,7 +260,7 @@ while (time.time() - start_time) < Config.TIME_LIMIT:
     is_not_full_screen_frame, is_not_full_screen_frame_locations = Utils.is_screen(
         frame, type='NotFullScreen')
     if is_game_frame:
-        Notifier.notify('game screen detected')
+        # Notifier.notify('game screen detected')
         game_frame_queue.enqueue(frame)
         print(msg)
         if game_frame_queue.length() > 1:
@@ -260,31 +272,41 @@ while (time.time() - start_time) < Config.TIME_LIMIT:
             else:
                 motion_detected = False
 
-        your_turn_map = defaultdict(str)
+        # Check if no motion
+        if not motion_detected and (time.time() - last_motion_time) > Config.NO_MOTION_THRESHOLD:
+            msg = f"No motion detected for {Config.NO_MOTION_THRESHOLD} seconds"
+            print(msg)
 
-        for tile in Config.YOUR_TURN_TILES:
-            found, loc = Utils.is_screen(frame, type=tile)
-            your_turn_map[tile] = [found, loc]
-            if found:
-                Utils.save_screenshot(frame, prefix=f'{tile}_')
-                break
+            your_turn_map = defaultdict(str)
 
-        results = [v[0] for k, v in your_turn_map.items()]
-        if max(results) == True:
-            Notifier.notify('your turn detected')
+            for tile in Config.YOUR_TURN_TILES:
+                found, loc = Utils.is_screen(frame, type=tile)
+                your_turn_map[tile] = [found, loc]
+                if found:
+                    Utils.save_screenshot(frame, prefix=f'{tile}_')
+                    break
 
-            print(results)
-            your_turn_map.clear()
-            for t, c in Config.YOUR_TURN_CLICK_COORDINATES.items():
+            results = [v[0] for k, v in your_turn_map.items()]
+            if max(results) == True:
+                Notifier.notify('your turn detected')
+
+                print(results)
+                your_turn_map.clear()
+                for t, c in Config.YOUR_TURN_CLICK_COORDINATES.items():
+                    if click_motion_detector.detect_after_click(c, type='other'):
+                        msg = f"Motion detected after clicking {t} at {c}"
+                        Notifier.notify(msg)
+                        break
+            else:
+                frame = ScreenshotCapturer.capture()
+                is_draw_frame, match_locations = Utils.is_screen(
+                    frame, type='Draw')
+                t = 'draw_game'
+                c = Config.CLICK_COORDINATES[t]
                 if click_motion_detector.detect_after_click(c, type='other'):
                     msg = f"Motion detected after clicking {t} at {c}"
                     Notifier.notify(msg)
-                    break
 
-        # Check if no motion
-        if not motion_detected and (time.time() - last_motion_time) > Config.NO_MOTION_THRESHOLD:
-            print(
-                f"No motion detected for {Config.NO_MOTION_THRESHOLD} seconds.")
     elif is_not_full_screen_frame:
         print(
             f'is_not_full_screen_frame_locations = {is_not_full_screen_frame_locations}')
@@ -313,6 +335,7 @@ while (time.time() - start_time) < Config.TIME_LIMIT:
         if not motion_detected and (time.time() - last_motion_time) > Config.NO_MOTION_THRESHOLD:
             msg = f"No motion detected for {Config.NO_MOTION_THRESHOLD} seconds."
             print(msg)
+            Notifier.notify(msg)
             for t, c in Config.OTHER_CLICK_COORDINATES.items():
                 if click_motion_detector.detect_after_click(c, type='other'):
                     msg = f"Motion detected after clicking {t} at {c}"

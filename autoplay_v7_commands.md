@@ -8,10 +8,10 @@ cd /Users/ericxu/Documents/Jupyter/mahjong;conda activate myenv;ts=$(date +%s);n
 
 2. on an android mobile device (tested on google pixel 8 pro), open the [Hong Kong Mahjong Club App](https://play.google.com/store/apps/details?id=com.pvella.mahjong&hl=en_US) and start a game
 
-3. in another terminal window, run
+3. to start the mobile device screen mirror and click control, in another terminal window, run
 ```zsh
-scrcpy
+scrcpy --bit-rate 16M
 ```
 
-4. Running #3 should open a mirrored window of your android mobile device screen.  Enter full screen (press green circle on top left to the right of the right and yellow circles) 
+4. Running #3 should open a mirrored window of your android mobile device screen.  Enter full screen (press green circle on top left to the right of the right and yellow circles) or fn+f5 on mac keyboard
 
