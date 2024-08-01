@@ -17,8 +17,8 @@ from collections import deque, OrderedDict, defaultdict
 class Config:
     SAMPLING_RATE_FPS = 100.            # (frames/sec)
     TIME_LIMIT = 30000                  # seconds
-    NO_MOTION_THRESHOLD = 0.8           # seconds
-    NO_MOTION_CLICK_THRESHOLD = 0.3     # seconds
+    NO_MOTION_THRESHOLD = 0.5           # seconds
+    NO_MOTION_CLICK_THRESHOLD = 0.1     # seconds
     CLICK_COORDINATES = {
         "reject": (1220, 430),
         "wall_tile": (1100, 540),
@@ -57,7 +57,7 @@ class Config:
         OTHER_CLICK_COORDINATES[k] = CLICK_COORDINATES[k]
     TIMESTAMP = str(datetime.now().strftime("%Y%m%d%H%M"))
     YOUR_TURN_TILES = set(['YourDiscard', 'Kong', 'Pong',
-                          'Chow', 'KongPong', 'PongChow'])
+                          'Chow', 'KongPong', 'PongChow', 'ChowSelection'])
 
 
 class Utils:
@@ -80,7 +80,7 @@ class Utils:
         elif type in ['KongPong', 'PongChow']:
             xy_search_boundaries = {"x_min": 1750, "y_min": 820}
         elif type == 'NotFullScreen':
-            xy_search_boundaries = {"x_max":250, "y_max": 100}
+            xy_search_boundaries = {"x_max": 250, "y_max": 100}
         else:
             pass
 
@@ -122,7 +122,7 @@ class Utils:
     @staticmethod
     def save_screenshot(frame, prefix=''):
         ms_ts_id = int(time.time() * 1000)   # millisecond timestamp id
-        path = f'/Users/ericxu/Documents/Jupyter/mahjong/{Config.TIMESTAMP}/{prefix}_{ms_ts_id}.png'
+        path = f'/Users/ericxu/Documents/Jupyter/mahjong/auto_screenshots/{Config.TIMESTAMP}/{prefix}_{ms_ts_id}.png'
         cv2.imwrite(path, frame)
         msg = f"{prefix} Screenshot saved @ {ms_ts_id}.png"
         print(msg)
@@ -168,7 +168,7 @@ class GameFrameQueue:
             msg = f"Screenshot saved @ {ms_ts_id}_{suffix}.png"
             print(msg)
             if i == 1:
-                path = f'/Users/ericxu/Documents/Jupyter/mahjong/{Config.TIMESTAMP}/{ms_ts_id}.png'
+                path = f'/Users/ericxu/Documents/Jupyter/mahjong/auto_screenshots/{Config.TIMESTAMP}/{ms_ts_id}.png'
                 cv2.imwrite(path, game_frame_queue[i])
                 msg = f"Screenshot saved @ {ms_ts_id}.png"
                 print(msg)
@@ -191,6 +191,11 @@ class MotionDetector:
             f1[0:1190, :, :] = 0
             f1[:, 1450:, :] = 0
             f1[1190:1400, 0:1150, :] = 0
+        elif type == 'other':
+            f1[1200:, :, :] = 0
+            f1[0:210, :, :] = 0
+            f2[1200:, :, :] = 0
+            f2[0:210, :, :] = 0
 
         gray1 = cv2.cvtColor(f1, cv2.COLOR_BGR2GRAY)
         gray2 = cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY)
@@ -243,6 +248,7 @@ while (time.time() - start_time) < Config.TIME_LIMIT:
     is_not_full_screen_frame, is_not_full_screen_frame_locations = Utils.is_screen(
         frame, type='NotFullScreen')
     if is_game_frame:
+        Notifier.notify('game screen detected')
         game_frame_queue.enqueue(frame)
         print(msg)
         if game_frame_queue.length() > 1:
@@ -260,14 +266,17 @@ while (time.time() - start_time) < Config.TIME_LIMIT:
             found, loc = Utils.is_screen(frame, type=tile)
             your_turn_map[tile] = [found, loc]
             if found:
+                Utils.save_screenshot(frame, prefix=f'{tile}_')
                 break
 
         results = [v[0] for k, v in your_turn_map.items()]
         if max(results) == True:
+            Notifier.notify('your turn detected')
+
             print(results)
             your_turn_map.clear()
             for t, c in Config.YOUR_TURN_CLICK_COORDINATES.items():
-                if click_motion_detector.detect_after_click(c):
+                if click_motion_detector.detect_after_click(c, type='other'):
                     msg = f"Motion detected after clicking {t} at {c}"
                     Notifier.notify(msg)
                     break
@@ -279,7 +288,7 @@ while (time.time() - start_time) < Config.TIME_LIMIT:
     elif is_not_full_screen_frame:
         print(
             f'is_not_full_screen_frame_locations = {is_not_full_screen_frame_locations}')
-        Notifier.notify('not full screen detected')
+        Notifier.notify('full screen not detected')
         time.sleep(5)
     else:
         non_game_frame_queue.enqueue(frame)
@@ -305,7 +314,7 @@ while (time.time() - start_time) < Config.TIME_LIMIT:
             msg = f"No motion detected for {Config.NO_MOTION_THRESHOLD} seconds."
             print(msg)
             for t, c in Config.OTHER_CLICK_COORDINATES.items():
-                if click_motion_detector.detect_after_click(c):
+                if click_motion_detector.detect_after_click(c, type='other'):
                     msg = f"Motion detected after clicking {t} at {c}"
                     Notifier.notify(msg)
                     break
