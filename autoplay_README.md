@@ -1,9 +1,11 @@
 ### README: Autoplay Python Script
 
+[Flow Schematic](https://github.com/eric-r-xu/DiscardWisdom/blob/main/HKMJ%20Decision%20Tree.png)
+
 #### 1. Start the Python Script
 Open a terminal window and run:
 ```zsh
-version=8; cd /Users/ericxu/Documents/Jupyter/mahjong; conda activate myenv; ts=$(date +%s); nohup python autoplay_v${version}.py >> logs/output_${ts}.log 2>&1 &
+version=9; cd /Users/ericxu/Documents/Jupyter/mahjong; conda activate myenv; ts=$(date +%s); nohup python autoplay_v${version}.py >> logs/output_${ts}.log 2>&1 &
 ```
 
 #### 2. Start the Mahjong Game
