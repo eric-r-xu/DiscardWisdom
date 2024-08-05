@@ -5,7 +5,10 @@
 #### 1. Start the Python Script
 Open a terminal window and run:
 ```zsh
-version=9; cd /Users/ericxu/Documents/Jupyter/mahjong; conda activate myenv; ts=$(date +%s); nohup python autoplay_v${version}.py >> logs/output_${ts}.log 2>&1 &
+version=9; cd /Users/ericxu/Documents/Jupyter/mahjong; conda activate myenv; ts=$(date +%s); python autoplay_v${version}.py 2>&1 | tee logs/log_$ts.txt
+
+# run in background
+version=9; cd /Users/ericxu/Documents/Jupyter/mahjong; conda activate myenv; ts=$(date +%s); nohup python autoplay_v${version}.py 2>&1 | tee logs/log_$ts.txt &
 ```
 
 #### 2. Start the Mahjong Game
@@ -21,7 +24,7 @@ scrcpy --video-bit-rate 16M
 Use the green circle or press `fn+F5` on a Mac keyboard to enter full screen.
 
 #### 5. Stop the Autoplay Script
-To stop all `autoplay_` Python processes, run:
+To stop all `autoplay_` Python processes (if run in background), run:
 ```zsh
 ps aux | grep autoplay_ | grep -v grep | awk '{print $2}' | xargs kill
 ```
