@@ -1,3 +1,5 @@
+![image](https://github.com/user-attachments/assets/a66fb749-046b-47ae-9618-d1c089666d51)
+
 # DiscardWisdom - HK Mahjong 🀄 Discard Suggestor 
 __Overview__: Ongoing pet project to create a tool/trainer to build intuition and enhance the gameplay experience of HK Mahjong players. This project integrates image recognition techniques and AI for strategic analysis to assist players in making optimal discard decisions, etc.
 
