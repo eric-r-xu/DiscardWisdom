@@ -5,10 +5,10 @@
 #### 1. Start the Python Script
 Open a terminal window and run:
 ```zsh
-version=9; cd /Users/ericxu/Documents/Jupyter/mahjong; conda activate myenv; ts=$(date +%s); python autoplay_v${version}.py 2>&1 | tee logs/log_$ts.txt
+version=11; cd /Users/ericxu/Documents/Jupyter/mahjong; conda activate myenv; ts=$(date +%s); python autoplay_v${version}.py 2>&1 | tee logs/log_$ts.txt
 
-# run in background
-version=9; cd /Users/ericxu/Documents/Jupyter/mahjong; conda activate myenv; ts=$(date +%s); nohup python autoplay_v${version}.py 2>&1 | tee logs/log_$ts.txt &
+# to run in background, use this instead
+version=11; cd /Users/ericxu/Documents/Jupyter/mahjong; conda activate myenv; ts=$(date +%s); nohup python autoplay_v${version}.py 2>&1 | tee logs/log_$ts.txt &
 ```
 
 #### 2. Start the Mahjong Game

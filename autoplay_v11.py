@@ -17,10 +17,10 @@ from Levenshtein import distance as levenshtein_distance
 class Config:
     TIMESTAMP = datetime.now().strftime("%Y%m%d%H%M")
     SCREENSHOT_SAMPLING_RATE_FPS = 120.0
-    SAMPLING_RATE_FPS = 50.0
+    SAMPLING_RATE_FPS = 60.0
     TIME_LIMIT = 30000
-    NO_MOTION_THRESHOLD = 0.3
-    NO_MOTION_WARNING = 10
+    NO_MOTION_THRESHOLD = 0.05
+    NO_MOTION_WARNING = 30
     SCREEN_MATCHING_THRESHOLD = 0.97
     TEMPLATE_PATH = '/Users/ericxu/Documents/Jupyter/mahjong/templates'
     SCREENSHOT_PATH = '/Users/ericxu/Documents/Jupyter/mahjong/auto_screenshots'
@@ -38,13 +38,13 @@ class Config:
         'KongPong': {"x_min": 1750, "y_min": 820},
         'PongChow': {"x_min": 1750, "y_min": 820},
         'NotFullScreen': {"x_max": 250, "y_max": 100},
-        "DetermineWinner": {"x_min": 595, "y_min": 500, "x_max": 620, "y_max": 600},
-        "DeterminePosition2": {"x_min": 595, "y_min": 720, "x_max": 620, "y_max": 820},
-        "DeterminePosition3": {"x_min": 595, "y_min": 940, "x_max": 620, "y_max": 1040},
-        "DeterminePosition4": {"x_min": 595, "y_min": 1160, "x_max": 620, "y_max": 1260},
+        "DetermineWinner": {"x_min": 580, "y_min": 500, "x_max": 645, "y_max": 600},
         "DetermineSelfPick": {"x_min": 1650, "y_min": 400, "y_max": 1200},
         "DetermineWinnerFan": {"x_min": 1600, "x_max": 2000, "y_min": 500, "y_max": 1000},
         "DetermineSeatWind": {"y_min": 660, "y_max": 740, "x_min": 1230, "x_max": 1345},
+        "DetermineFireGun2": {"y_min": 700, "y_max": 800, "x_min": 1480, "x_max": 1600},
+        "DetermineFireGun3": {"y_min": 925, "y_max": 1025, "x_min": 1480, "x_max": 1600},
+        "DetermineFireGun4": {"y_min": 1150, "y_max": 1250, "x_min": 1480, "x_max": 1600},
     }
 
     CLICK_COORDINATES = {
@@ -78,8 +78,6 @@ class Config:
     GAME_ACTION_SCREENS = ['YourDiscard', 'Chow', 'Pong', 'Woo', 'WooChow',
                            'Kong', 'ChowSelection', 'KongPong', 'PongChow', 'Draw']
 
-    NEXT_GAME_CHILDREN = ["DetermineSelfPick"]
-
 
 class Utils:
     @staticmethod
@@ -112,6 +110,35 @@ class Utils:
                 return True, [int(min(xloc)), int(max(xloc)), int(min(yloc)), int(max(yloc)), template_path]
 
         return False, [0, 0, 0, 0, '']
+
+    def chars_on_screen(frame, screen_type='DetermineFireGun2'):
+        xy_search_boundaries = {}
+
+        xy_search_boundaries.update(
+            Config.TEMPLATE_BOUNDARY_MAP.get(screen_type, {}))
+        x_min = xy_search_boundaries.get("x_min", 0)
+        x_max = xy_search_boundaries.get("x_max", frame.shape[1])
+        y_min = xy_search_boundaries.get("y_min", 0)
+        y_max = xy_search_boundaries.get("y_max", frame.shape[0])
+
+        f = frame[y_min:y_max, x_min:x_max]
+        fg = cv2.cvtColor(f, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(fg, (5, 5), 0)
+        adaptive_thresh = cv2.adaptiveThreshold(
+            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+
+        kernel = np.ones((2, 2), np.uint8)
+        morph = cv2.morphologyEx(adaptive_thresh, cv2.MORPH_CLOSE, kernel)
+
+        custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=1234567890'
+        extracted_text = pytesseract.image_to_string(
+            morph, config=custom_config)
+
+        any_characters = re.findall(r'[0-9]+', extracted_text)
+        if any_characters:
+            return True
+        else:
+            return False
 
     @staticmethod
     def save_screenshot(frame, prefix=''):
@@ -307,8 +334,8 @@ if __name__ == "__main__":
     click_motion_detector = ClickMotionDetector()
     last_motion_time = time.time()
     no_motion_before = False
-
-    seat_wind = None
+    seat_wind = 'NA'
+    wind_order = 'NA'
 
     while (time.time() - start_time) < Config.TIME_LIMIT:
         frame = ScreenshotCapturer.capture()
@@ -345,9 +372,7 @@ if __name__ == "__main__":
             Notifier.notify('full screen not detected')
             time.sleep(5)
         elif game_screen:
-            if seat_wind:
-                pass
-            else:
+            if seat_wind == 'NA':
                 st = 'DetermineSeatWind'
                 game_frame = frame.copy()
                 xxyy = Config.TEMPLATE_BOUNDARY_MAP.get(st, {})
@@ -363,14 +388,14 @@ if __name__ == "__main__":
                 extracted_text = pytesseract.image_to_string(
                     eroded, config=custom_config)
                 letters = re.findall(r'[a-zA-Z]', extracted_text)
-
-                if letters:
-                    letter = ''.join(letters)
+                letter = ''.join(letters)
+                if letter in ['N', 'W', 'S', 'E']:
                     msg = f"Seat Wind - {letter}"
-                    # print(msg)
-                    # Notifier.notify(msg)
+                    print(msg)
+                    Notifier.notify(msg)
+                    seat_wind = letter
                 else:
-                    msg = f"WARNING: Seat Wind Not Found"
+                    msg = f"WARNING: no valid seat wind found"
                     print(msg)
                     Notifier.notify(msg)
 
@@ -411,73 +436,104 @@ if __name__ == "__main__":
                                             xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
             winner_wind = Utils.find_closest_wind(cropped_image)
             comparison_set.remove(winner_wind)
-            if seat_wind == winner_wind and seat_wind is not None:
+            if seat_wind == 'NA':
+                Notifier.notify('WARNING: no seat wind recorded')
+            elif seat_wind == winner_wind:
                 details += '_WINNER'
                 msg = 'You are a winner!'
                 print(msg)
                 Notifier.notify(msg)
+            else:
+                details += '_LOSER'
+                msg = 'You are a loser'
+                print(msg)
+                Notifier.notify(msg)
+
             details += f'_{winner_wind}'
             #######################################################
-            st = 'DeterminePosition2'
-            next_game_frame = frame.copy()
-            xxyy = Config.TEMPLATE_BOUNDARY_MAP.get(st, {})
-            cropped_image = next_game_frame[xxyy.get("y_min", 0):xxyy.get("y_max", 0),
-                                            xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
-            pos_2_wind = Utils.find_closest_wind(cropped_image, comparison_set)
-            details += f'{pos_2_wind}'
-            comparison_set.remove(pos_2_wind)
-            #######################################################
-            st = 'DeterminePosition3'
-            next_game_frame = frame.copy()
-            xxyy = Config.TEMPLATE_BOUNDARY_MAP.get(st, {})
-            cropped_image = next_game_frame[xxyy.get("y_min", 0):xxyy.get("y_max", 0),
-                                            xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
-            pos_3_wind = Utils.find_closest_wind(cropped_image, comparison_set)
-            details += f'{pos_3_wind}'
-            comparison_set.remove(pos_3_wind)
-            #######################################################
-            pos_4_wind = list(comparison_set)[0]
-            details += f'{pos_4_wind}'
-            Notifier.notify(details)
-            #######################################################
-            st = 'DetermineWinnerFan'
-            next_game_frame = frame.copy()
-            xxyy = Config.TEMPLATE_BOUNDARY_MAP.get(st, {})
-            cropped_image = next_game_frame[xxyy.get("y_min", 0):xxyy.get("y_max", 0),
-                                            xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
-            cropped_image = Image.fromarray(cropped_image).convert('L').filter(
-                ImageFilter.MedianFilter()).point(lambda p: p > 128 and 255)
-            base_width = 1000
-            w_percent = (base_width / float(cropped_image.size[0]))
-            h_size = int((float(cropped_image.size[1]) * float(w_percent)))
-            cropped_image = cropped_image.resize(
-                (base_width, h_size), Image.LANCZOS)
-            custom_config = r'--oem 3 --psm 6'
-            extracted_text = pytesseract.image_to_string(
-                cropped_image, config=custom_config)
-            match = re.search(r'Total\s*Fan\s*(\d+)',
-                              extracted_text, re.IGNORECASE)
 
-            if match:
-                total_fan_number = match.group(1)
-                msg = f"Total Fan Number: {total_fan_number}"
-                print(msg)
-                Notifier.notify(msg)
-                details += ''.join(['_', str(total_fan_number), 'Fan'])
-            else:
-                msg = 'WARNING: Total Fan cannot be found.'
-                print(msg)
-                Notifier.notify(msg)
-                details += '_NoFanFound'
-            ############################################################
-            for child_screen_type in Config.NEXT_GAME_CHILDREN:
-                r, _ = Utils.is_screen(frame, screen_type=child_screen_type)
-                if r:
-                    msg = f'next game: found'
-                    Notifier.notify(msg)
+            def process_image():
+                st = 'DetermineWinnerFan'
+                next_game_frame = frame.copy()
+                xxyy = Config.TEMPLATE_BOUNDARY_MAP.get(st, {})
+                cropped_image = next_game_frame[xxyy.get("y_min", 0):xxyy.get("y_max", 0),
+                                                xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
+                cropped_image = Image.fromarray(cropped_image).convert('L').filter(
+                    ImageFilter.MedianFilter()).point(lambda p: p > 128 and 255)
+                base_width = 1000
+                w_percent = (base_width / float(cropped_image.size[0]))
+                h_size = int((float(cropped_image.size[1]) * float(w_percent)))
+                cropped_image = cropped_image.resize(
+                    (base_width, h_size), Image.LANCZOS)
+                custom_config = r'--oem 3 --psm 6'
+                extracted_text = pytesseract.image_to_string(
+                    cropped_image, config=custom_config)
+                match = re.search(r'Total\s*Fan\s*(\d+)',
+                                  extracted_text, re.IGNORECASE)
+                return match
+
+            # Retry mechanism
+            attempts = 2
+            for attempt in range(attempts):
+                match = process_image()
+                if match:
+                    total_fan_number = match.group(1)
+                    msg = f"Total Fan Number: {total_fan_number}"
                     print(msg)
-                    details += '_'
-                    details += child_screen_type
+                    Notifier.notify(msg)
+                    details += ''.join(['_', str(total_fan_number), 'Fan'])
+                    break
+                else:
+                    if attempt < attempts - 1:
+                        print('WARNING: Total Fan not found, retrying...')
+                    else:
+                        msg = 'WARNING: Total Fan cannot be found.'
+                        print(msg)
+                        Notifier.notify(msg)
+                        details += '_NoFanFound'
+            ############################################################
+            st = 'DetermineSelfPick'
+            r, _ = Utils.is_screen(frame, screen_type=st)
+            if r:
+                msg = f'{st} detected'
+                Notifier.notify(msg)
+                print(msg)
+                details += '_SelfPick'
+            else:
+                msg = 'Self Pick not detected, determining firegunner'
+                print(msg)
+                Notifier.notify(msg)
+                ############################################################
+                if seat_wind in ['E', 'N', 'W', 'S'] and winner_wind in ['E', 'N', 'W', 'S']:
+                    if winner_wind == 'E':
+                        wind_order = 'ESWN'
+                    elif winner_wind == 'S':
+                        wind_order = 'SWNE'
+                    elif winner_wind == 'N':
+                        wind_order = 'NESW'
+                    elif winner_wind == 'W':
+                        wind_order = 'WNES'
+                    print(wind_order)
+                    Notifier.notify(f'wind order = {wind_order}')
+
+                    has_chars_on_screen = []
+                    for i, st in enumerate(['DetermineFireGun2', 'DetermineFireGun3', 'DetermineFireGun4']):
+                        print(f'{st}')
+                        has_chars_on_screen.append(
+                            Utils.chars_on_screen(frame, screen_type=st))
+                    print(f'has_chars_on_screen = {has_chars_on_screen}')
+                    # if only one player has negative points , then s/he is the firegun
+                    if sum(has_chars_on_screen) == 1:
+                        Notifier.notify(has_chars_on_screen)
+                        if seat_wind == wind_order[[i for i, v in enumerate(has_chars_on_screen) if v][0]+1]:
+                            msg = 'You ({seat_wind}) detected as firegun!'
+                            Notifier.notify(msg)
+                            print(msg)
+                            details += '_FireGun'
+                else:
+                    msg = f'WARNING: seat_wind {seat_wind} and/or winner_wind {winner_wind} is invalid, cannot properly determine firegunner '
+                    print(msg)
+                    Notifier.notify(msg)
 
             Utils.save_screenshot(frame, prefix=screen_type + details)
             for click_label in Config.ACTION_SCREEN_CLICK_ORDER[screen_type]:
@@ -496,7 +552,8 @@ if __name__ == "__main__":
                     Utils.save_screenshot(
                         fac, prefix=screen_type + '_after_click_')
                     break
-            seat_wind = None
+            seat_wind = 'NA'
+            wind_order = 'NA'
 
         elif ad:
             screen_type = 'Ad'
@@ -526,7 +583,6 @@ if __name__ == "__main__":
             msg = f"{screen_type} screen detected"
             print(msg)
             Notifier.notify(msg)
-            # seat_wind = None
 
         time.sleep(1 / Config.SAMPLING_RATE_FPS)
 
