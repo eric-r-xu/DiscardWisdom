@@ -55,14 +55,22 @@ __Overview__: Ongoing pet project to create a tool/trainer to build intuition an
 
 
 
-## [Anonymous Google Survey From Tool](https://forms.gle/p1MEc6aR4XaoHGoT8)
+## [HKMJ Validation Survey v1](https://forms.gle/p1MEc6aR4XaoHGoT8)
 
-[Please Help Validate the Hong Kong Mahjong Discard Scoring System!](https://forms.gle/p1MEc6aR4XaoHGoT8)  🙏🙏🙏🙏
+### Results 📊   
+- For all 10 scenarios, 2+/3 participants suggested a tile in the top 50th percentile of recommended tiles to discard. 👍
+- 1+ respondents correctly identified an optimal tile to discard in 8 out of 10 scenarios (exceptions: scenarios 9 and 10). 👍
+- No specific feedback was given on any particular scenario. 🤐
+### Conclusions and Next Steps 📝
+- Scenarios 9 and 10 indicate potential scoring adjustments for chow vs pung possibilities, etc.
+- Incorporating defensive strategies such as opponent discards is another valuable suggestion (thanks to you know who).
+- The algorithm appears directionally correct, which is very encouraging ✅🏆
+- Currently, I am working on generating empirical data with autoplay functionality to increase the likelihood of winning (增加胡) and decrease the likelihood of being the firegun (减少放铳).
+- Any and all feedback is welcome. Feel free to message separately as well.
 
 
 ---
-
-
+---
 
 ### Key Features/Notes
 
