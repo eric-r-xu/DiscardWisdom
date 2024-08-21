@@ -25,13 +25,12 @@ class Config:
     NO_MOTION_WARNING = 30
     SCREEN_MATCHING_THRESHOLD = 0.97
     TILE_MATCHING_THRESHOLD = 0.97
-    TILE_MATCHING_THRESHOLD = 0.97
+    OFFERED_TILE_MATCHING_THRESHOLD = 0.9
     TILE_OVERLAP_THRESHOLD = 10
     CHANGE_THRESHOLD_MELDS_FLOWERS = 20
     TEMPLATE_PATH = '/Users/ericxu/Documents/Jupyter/mahjong/templates'
     SCREENSHOT_PATH = '/Users/ericxu/Documents/Jupyter/mahjong/auto_screenshots'
     WINDS = ['E', 'N', 'W', 'S']
-
 
     TEMPLATE_BOUNDARY_MAP = {
         'GameScreen': {"x_min": 1140, "y_min": 1260},
@@ -40,6 +39,7 @@ class Config:
         'Kong': {"x_min": 1930, "y_min": 820},
         'Woo': {"x_min": 2100, "y_min": 810},
         'WooChow': {"x_min": 1750, "y_min": 810},
+        'WooPong': {"x_min": 1750, "y_min": 810},
         'Chow': {"x_min": 1930, "y_min": 820},
         "ChowSelection": {"y_min": 800, "y_max": 1050},
         'YourDiscard': {"x_min": 2000, "y_min": 820},
@@ -71,7 +71,9 @@ class Config:
         "exit_ad": (1205, 191), "exit_ad2": (1202, 197), "exit_ad3": (1243, 141),
         "exit_ad4": (668, 604), "next_game": (893, 626), "draw_game": (618, 450),
         "x_left": (114, 168), "ad_close": (632, 437), "xx": (1013, 252),
-        "ad_skip_video": (1133, 152), "ad_play": (1068, 202), "ad_white_x": (1238, 175), "ad_white_x_black_background": (1245, 150),
+        "ad_skip_video": (1133, 152), "ad_play": (1068, 202), "ad_white_x": (1238, 175),
+        "ad_white_x_black_background": (1245, 150), "ad_white_x2": (1107, 206),
+        "google_play_x": (1067, 231), "x7": (1106, 203),
     }
 
     ACTION_SCREEN_CLICK_ORDER = {
@@ -87,13 +89,15 @@ class Config:
         "Ad": ["xx", "x2", "x_left", "exit_ad", "x", "close_ad", "exit_ad4", "exit_ad3", "exit_ad2", "ad_close", "ad_skip_video", "ad_play"],
         "Woo": ['accept'],
         "WooChow": ['accept_left'],
-        "ad_skip_video": ["ad_skip_video"], "ad_play": ["ad_play"], "ad_white_x": ["ad_white_x"], "ad_white_x_black_background": ["ad_white_x_black_background"]
+        "WooPong": ['accept_left'],
+        "ad_skip_video": ["ad_skip_video"], "ad_play": ["ad_play"], "ad_white_x": ["ad_white_x"], "ad_white_x_black_background": ["ad_white_x_black_background"],
+        "google_play_x": ["google_play_x"], "x7": ["x7"], "ad_white_x2": ["ad_white_x2"],
     }
 
-    GAME_ACTION_SCREENS = ['YourDiscard', 'Chow', 'Pong', 'Woo', 'WooChow',
+    GAME_ACTION_SCREENS = ['YourDiscard', 'Chow', 'Pong', 'Woo', 'WooChow', 'WooPong'
                            'Kong', 'ChowSelection', 'KongPong', 'PongChow', 'Draw']
 
-    MELD_SCREENS = ['Chow', 'Pong', 'Woo', 'WooChow',
+    MELD_SCREENS = ['Chow', 'Pong', 'Woo', 'WooChow', 'WooPong'
                     'Kong', 'KongPong', 'PongChow']
 
 
@@ -249,24 +253,27 @@ class Utils:
         dir_path = os.path.join(Config.SCREENSHOT_PATH, Config.TIMESTAMP)
         os.makedirs(dir_path, exist_ok=True)
         path = os.path.join(dir_path, f'{prefix}_{ms_ts_id}.png')
-        
+
         # Overlay text on the frame if text_info is provided
         if text_info:
             font = cv2.FONT_HERSHEY_SIMPLEX
             font_scale = 1
             color = (0, 0, 255)  # Red color in BGR for the text
             thickness = 2  # Thickness for the main text (red)
-            outline_color = (255, 255, 255)  # White color in BGR for the outline
-            outline_thickness = thickness + 2  # Thickness for the outline (white)
+            # White color in BGR for the outline
+            outline_color = (255, 255, 255)
+            # Thickness for the outline (white)
+            outline_thickness = thickness + 2
             position = (10, 30)  # Position of the text on the image
 
             # Draw the outline (white)
-            cv2.putText(frame, text_info, position, font, font_scale, outline_color, outline_thickness, cv2.LINE_AA)
-            
-            # Draw the text (red) on top of the outline
-            cv2.putText(frame, text_info, position, font, font_scale, color, thickness, cv2.LINE_AA)
+            cv2.putText(frame, text_info, position, font, font_scale,
+                        outline_color, outline_thickness, cv2.LINE_AA)
 
-        
+            # Draw the text (red) on top of the outline
+            cv2.putText(frame, text_info, position, font,
+                        font_scale, color, thickness, cv2.LINE_AA)
+
         cv2.imwrite(path, frame)
         msg = f"{prefix} sshot --> {prefix}_{ms_ts_id}.png"
         print(msg)
@@ -289,7 +296,7 @@ class Utils:
         return str(pst_dt)[0:19]
 
     @staticmethod
-    def find_offered_meld(frame, screen_type='large_discards', threshold=Config.TILE_MATCHING_THRESHOLD, save_screenshot=True):
+    def find_offered_meld(frame, screen_type='large_discards', threshold=Config.OFFERED_TILE_MATCHING_THRESHOLD, save_screenshot=True):
         frame1 = frame.copy()
         frame1[0:210, :, :] = 0
         frame1[950:, :, :] = 0
@@ -327,8 +334,9 @@ class Utils:
                 tile = template_path.replace('.png', '')
 
                 return tile
-        _text_info = 'offered meld: {tile}'
-        Utils.save_screenshot(frame, prefix='OfferedMeld', text_info=_text_info)
+        _text_info = f'offered meld: {tile}'
+        Utils.save_screenshot(frame, prefix='OfferedMeld',
+                              text_info=_text_info)
 
         return None
 
@@ -410,15 +418,14 @@ class Utils:
 
         return all_discards_and_melds_found
 
-
     @staticmethod
     def determine_your_discards(frame, screen_type='player_you_discardable', threshold=Config.TILE_MATCHING_THRESHOLD, save_screenshot=True):
         your_discards = defaultdict(int)
         ms_ts_id = int(time.time() * 1000)
         frame1 = frame.copy()
 
-        frame1[0:940,:,:] = 0
-        frame1[1190:,:] = 0
+        frame1[0:940, :, :] = 0
+        frame1[1190:, :] = 0
 
         xy_search_boundaries = {}
         xy_search_boundaries.update(
@@ -447,7 +454,6 @@ class Utils:
                 f1, template, cv2.TM_CCOEFF_NORMED)
             match_found = np.any(matched_result >= threshold)
 
-
             if match_found:
                 tile = template_path.replace('.png', '')
                 yloc, xloc = np.where(matched_result >= threshold)
@@ -466,9 +472,9 @@ class Utils:
                             if screen_type == 'player_you_discardable':
                                 if x >= 2132 and x < 2152:
                                     filename = f'{ms_ts_id}_tile_{tile}_x{x}_wall_tile.png'
-                                elif x >= 1946 and x < 1978 :
+                                elif x >= 1946 and x < 1978:
                                     filename = f'{ms_ts_id}_tile_{tile}_x{x}_D13.png'
-                                elif x >= 1811 and x < 1831:
+                                elif x >= 1811 and x < 1835:
                                     filename = f'{ms_ts_id}_tile_{tile}_x{x}_D12.png'
                                 elif x >= 1682 and x < 1702:
                                     filename = f'{ms_ts_id}_tile_{tile}_x{x}_D11.png'
@@ -482,20 +488,20 @@ class Utils:
                                     filename = f'{ms_ts_id}_tile_{tile}_x{x}_D7.png'
                                 elif x >= 1002 and x < 1022:
                                     filename = f'{ms_ts_id}_tile_{tile}_x{x}_D6.png'
-                                elif x >= 864 and x < 884:
+                                elif x >= 864 and x < 890:
                                     filename = f'{ms_ts_id}_tile_{tile}_x{x}_D5.png'
                                 elif x >= 726 and x < 756:
                                     filename = f'{ms_ts_id}_tile_{tile}_x{x}_D4.png'
-                                elif x >= 588 and x < 608:
+                                elif x >= 588 and x < 620:
                                     filename = f'{ms_ts_id}_tile_{tile}_x{x}_D3.png'
-                                elif x >= 450 and x < 470:
+                                elif x >= 450 and x < 480:
                                     filename = f'{ms_ts_id}_tile_{tile}_x{x}_D2.png'
-                                elif x >= 312 and x < 332:
+                                elif x >= 312 and x < 350:
                                     filename = f'{ms_ts_id}_tile_{tile}_x{x}_D1.png'
                                 else:
                                     filename = f'{ms_ts_id}_tile_{tile}_x{x}_D_undetermined.png'
                             elif screen_type == 'player_you_melded':
-                                if x >= 295 and x < 315 :
+                                if x >= 295 and x < 315:
                                     filename = f'{ms_ts_id}_melded_tile_{tile}_x{x}_D1.png'
                                 elif x >= 430 and x < 450:
                                     filename = f'{ms_ts_id}_melded_tile_{tile}_x{x}_D2.png'
@@ -522,7 +528,6 @@ class Utils:
                                 else:
                                     filename = f'{ms_ts_id}_melded_tile_{tile}_x{x}_D_undetermined.png'
 
-                            
                             output_path = os.path.join(
                                 Config.SCREENSHOT_PATH, Config.TIMESTAMP, filename)
 
@@ -534,8 +539,9 @@ class Utils:
                 your_discards[tile] += counter
 
         _text_info = str(dict(sorted(your_discards.items())))
-        Utils.save_screenshot(f1, prefix=f'{ms_ts_id}_{screen_type}', text_info=_text_info)
-        
+        Utils.save_screenshot(
+            f1, prefix=f'{ms_ts_id}_{screen_type}', text_info=_text_info)
+
         return your_discards
 
     @staticmethod
@@ -614,7 +620,6 @@ class Utils:
 
         return
 
-
     @staticmethod
     def save_png_frame_changes(frame1, frame2, threshold=Config.CHANGE_THRESHOLD_MELDS_FLOWERS, frame_type='normal', save_contours=False, text_info=None):
         f1 = frame1.copy()
@@ -623,31 +628,30 @@ class Utils:
 
         def preprocess(f1, frame_type):
             if frame_type == 'normal':
-                f1[1200:,:,:] = 1
-                f1[:222,:,:] = 1
-                f1[:,0:160,:] = 1
-                f1[:,2400:,:] = 1
+                f1[1200:, :, :] = 1
+                f1[:222, :, :] = 1
+                f1[:, 0:160, :] = 1
+                f1[:, 2400:, :] = 1
             elif frame_type == 'player_left':
-                f1[1200:,:,:] = 1
-                f1[:222,:,:] = 1
-                f1[:,375:,:] = 1
-                f1[910:,:,:] = 1
-                f1[:,:150,:] = 1
+                f1[1200:, :, :] = 1
+                f1[:222, :, :] = 1
+                f1[:, 375:, :] = 1
+                f1[910:, :, :] = 1
+                f1[:, :150, :] = 1
             elif frame_type == 'player_right':
-                f1[:222,:,:] = 1
-                f1[:,:2175,:] = 1
-                f1[:,2400:,:] = 1
-                f1[980:,:,:] = 1
+                f1[:222, :, :] = 1
+                f1[:, :2175, :] = 1
+                f1[:, 2400:, :] = 1
+                f1[980:, :, :] = 1
             elif frame_type == 'player_across':
-                f1[:222,:,:] = 1
-                f1[410:,:,:] = 1
-                f1[:,0:450,:] = 1
-                f1[:,2100:,:] = 1
-                f1[350:420,350:1200,:] = 1
+                f1[:222, :, :] = 1
+                f1[410:, :, :] = 1
+                f1[:, 0:450, :] = 1
+                f1[:, 2100:, :] = 1
+                f1[350:420, 350:1200, :] = 1
             elif frame_type == 'player_you_discardable':
-                f1[0:940,:,:] = 1
-                f1[1190:,:] = 1
-                
+                f1[0:940, :, :] = 1
+                f1[1190:, :] = 1
 
             return f1
 
@@ -673,11 +677,12 @@ class Utils:
         if save_contours:
             for i, contour in enumerate(contours):
                 x, y, w, h = cv2.boundingRect(contour)
-                if w >= 30 and h >= 30:     # ensure changes are valid and significant 
+                if w >= 30 and h >= 30:     # ensure changes are valid and significant
                     cropped_change = frame2[y:y+h, x:x+w]
-                    crop_output_path = f'{Config.SCREENSHOT_PATH}/{Config.TIMESTAMP}/{ms_ts_id}_countour_{frame_type}_{i}.png'
+                    crop_output_path = f'{Config.SCREENSHOT_PATH}/{Config.TIMESTAMP}/contour_{ms_ts_id}_countour_{frame_type}_{i}.png'
                     cv2.imwrite(crop_output_path, cropped_change)
-                    print(f'Cropped change saved to {crop_output_path} with x/y/w/h = {x}/{y}/{w}/{h}')
+                    print(
+                        f'Cropped change saved to {crop_output_path} with x/y/w/h = {x}/{y}/{w}/{h}')
 
         if frame_type == 'normal':
             # Create a mask from the thresholded difference image
@@ -693,28 +698,30 @@ class Utils:
             # Combine the original frame with the highlighted changes
             highlighted_image = cv2.addWeighted(
                 f1, 0.5, highlighted_changes, 0.5, 0)
-        
+
             # Save the highlighted image with text info if provided
             if text_info:
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 font_scale = 1
                 color = (0, 0, 255)  # Red color in BGR for the text
                 thickness = 2  # Thickness for the main text (red)
-                outline_color = (255, 255, 255)  # White color in BGR for the outline
-                outline_thickness = thickness + 2  # Thickness for the outline (white)
+                # White color in BGR for the outline
+                outline_color = (255, 255, 255)
+                # Thickness for the outline (white)
+                outline_thickness = thickness + 2
                 position = (10, 30)  # Position of the text on the image
-    
-                # Draw the outline (white)
-                cv2.putText(highlighted_image, text_info, position, font, font_scale, outline_color, outline_thickness, cv2.LINE_AA)
-                
-                # Draw the text (red) on top of the outline
-                cv2.putText(highlighted_image, text_info, position, font, font_scale, color, thickness, cv2.LINE_AA)
 
+                # Draw the outline (white)
+                cv2.putText(highlighted_image, text_info, position, font,
+                            font_scale, outline_color, outline_thickness, cv2.LINE_AA)
+
+                # Draw the text (red) on top of the outline
+                cv2.putText(highlighted_image, text_info, position,
+                            font, font_scale, color, thickness, cv2.LINE_AA)
 
             _output_path = f'{Config.SCREENSHOT_PATH}/{Config.TIMESTAMP}/{ms_ts_id}_highlighted_delta.png'
             cv2.imwrite(_output_path, highlighted_image)
             print(f'finished saving to {_output_path}')
-
 
     @staticmethod
     def find_closest_wind(cropped_image, offset=0):
@@ -979,26 +986,29 @@ if __name__ == "__main__":
                             game_frame, screen_type='small_discards')
                         sorted_dict = dict(
                             sorted(all_new_discards_and_melds_found.items()))
-                        
+
                         ########### start: find your discardeable tiles and positions ###########
                         # ydt = your discardable tiles
-                        ydt = Utils.determine_your_discards(game_frame, save_screenshot=True)
+                        ydt = Utils.determine_your_discards(
+                            game_frame, save_screenshot=True)
                         sorted_ydt = dict(sorted(ydt.items()))
-                        sorted_filtered_ydt = {key: value for key, value in sorted_ydt.items() if value != 0}
+                        sorted_filtered_ydt = {
+                            key: value for key, value in sorted_ydt.items() if value != 0}
                         msg = f'your discardeable tiles = {sorted_filtered_ydt}'
                         print(msg)
                         ########### end: find your discardeable tiles and positions ###########
 
                         ########### start: find your melded tiles and positions ###########
                         # ymt = your melded tiles
-                        ymt = Utils.determine_your_discards(game_frame, screen_type='player_you_melded', save_screenshot=True)
+                        ymt = Utils.determine_your_discards(
+                            game_frame, screen_type='player_you_melded', save_screenshot=True)
                         sorted_ymt = dict(sorted(ymt.items()))
-                        sorted_filtered_ymt = {key: value for key, value in sorted_ymt.items() if value != 0}
+                        sorted_filtered_ymt = {
+                            key: value for key, value in sorted_ymt.items() if value != 0}
                         msg = f'your melded tiles = {sorted_filtered_ymt}'
                         print(msg)
                         ########### end: find your melded tiles and positions ###########
-                        
-                        
+
                         if your_discard_queue.length() > 1:
                             previous_game_frame = your_discard_queue[0]
                             previous_all_discards_and_melds_found = Utils.find_all_discards_and_melds(
@@ -1007,21 +1017,24 @@ if __name__ == "__main__":
                                 all_new_discards_and_melds_found, previous_all_discards_and_melds_found)
                             sorted_dict = dict(sorted(sorted_dict.items()))
 
-                            
-                            filtered_dict = {key: value for key, value in sorted_dict.items() if value != 0}
+                            filtered_dict = {
+                                key: value for key, value in sorted_dict.items() if value != 0}
                             if filtered_dict == {}:
-                                Utils.debug_screenshot(game_frame, details='_no_changes_found')
+                                Utils.debug_screenshot(
+                                    game_frame, details='_no_changes_found')
                             msg = f'new discards/melds found: {filtered_dict}'
                             print(msg)
-                            Utils.save_png_frame_changes(previous_game_frame, game_frame, frame_type='normal', save_contours=False, text_info=str(filtered_dict))
-                            Utils.save_png_frame_changes(previous_game_frame, game_frame, frame_type='player_left', save_contours=True)
-                            Utils.save_png_frame_changes(previous_game_frame, game_frame, frame_type='player_right', save_contours=True)
-                            Utils.save_png_frame_changes(previous_game_frame, game_frame, frame_type='player_across', save_contours=True)
+                            Utils.save_png_frame_changes(
+                                previous_game_frame, game_frame, frame_type='normal', save_contours=False, text_info=str(filtered_dict))
+                            Utils.save_png_frame_changes(
+                                previous_game_frame, game_frame, frame_type='player_left', save_contours=True)
+                            Utils.save_png_frame_changes(
+                                previous_game_frame, game_frame, frame_type='player_right', save_contours=True)
+                            Utils.save_png_frame_changes(
+                                previous_game_frame, game_frame, frame_type='player_across', save_contours=True)
 
-                            
-                            
-                        #Notifier.notify(msg)
-                        #time.sleep(3)
+                        # Notifier.notify(msg)
+                        # time.sleep(3)
                     elif screen_type in Config.MELD_SCREENS:
                         offered_meld = None
                         offered_meld = Utils.find_offered_meld(game_frame)
@@ -1029,10 +1042,11 @@ if __name__ == "__main__":
                             msg = f'Offered meld: {offered_meld}'
                         else:
                             msg = f'ERROR: offered meld undetected'
-                            Utils.debug_screenshot(game_frame, details='_offered_meld_undetected')
+                            Utils.debug_screenshot(
+                                game_frame, details='_offered_meld_undetected')
                         print(msg)
-                        #Notifier.notify(msg)
-                        #time.sleep(3)
+                        # Notifier.notify(msg)
+                        # time.sleep(3)
 
                     for click_label in Config.ACTION_SCREEN_CLICK_ORDER[screen_type]:
                         c = Config.CLICK_COORDINATES.get(click_label, (0, 0))
@@ -1149,10 +1163,11 @@ if __name__ == "__main__":
                         details += '_FIREGUN'
 
             msg = f'details = {details}'
-            #Notifier.notify(msg)
-            #time.sleep(2)
+            # Notifier.notify(msg)
+            # time.sleep(2)
 
-            Utils.save_screenshot(frame, prefix=screen_type + details, text_info=details.replace('_',' '))
+            Utils.save_screenshot(
+                frame, prefix=screen_type + details, text_info=details.replace('_', ' '))
             for click_label in Config.ACTION_SCREEN_CLICK_ORDER[screen_type]:
                 c = Config.CLICK_COORDINATES.get(click_label, (0, 0))
                 if c == (0, 0):
@@ -1171,7 +1186,8 @@ if __name__ == "__main__":
         elif ad:
             screen_type = 'Ad'
             precise_ad_screen = _a[4].replace('.png', '')
-            if _a[4].replace('.png', '') in ["ad_skip_video", "ad_play", "ad_white_x"]:
+
+            if _a[4].replace('.png', '') in ["ad_skip_video", "ad_play", "ad_white_x", "google_play_x", "x7", "ad_white_x_black_background"]:
                 screen_type = precise_ad_screen
 
             msg = f"{screen_type} detected"
