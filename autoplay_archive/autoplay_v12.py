@@ -8,6 +8,7 @@ import pytesseract
 import re
 import pyautogui
 from pync import Notifier
+from collections import defaultdict
 from PIL import Image, ImageFilter
 from collections import deque
 from threading import Thread, Event
@@ -22,7 +23,7 @@ class Config:
     NO_MOTION_THRESHOLD = 0.1
     NO_MOTION_WARNING = 30
     SCREEN_MATCHING_THRESHOLD = 0.97
-    DISCARD_TILE_MATCHING_THRESHOLD = 0.6
+    DISCARD_TILE_MATCHING_THRESHOLD = 0.88
     TEMPLATE_PATH = '/Users/ericxu/Documents/Jupyter/mahjong/templates'
     SCREENSHOT_PATH = '/Users/ericxu/Documents/Jupyter/mahjong/auto_screenshots'
     WINDS = ['E', 'N', 'W', 'S']
@@ -40,6 +41,8 @@ class Config:
         'KongPong': {"x_min": 1750, "y_min": 820},
         'PongChow': {"x_min": 1750, "y_min": 820},
         'NotFullScreen': {"x_max": 250, "y_max": 100},
+        "large_discards": {"y_min": 300, "y_max": 900, "x_min": 600, "x_max": 1900},
+        "small_discards": {"y_min": 300, "y_max": 900, "x_min": 600, "x_max": 1900},
         "DetermineWinner": {"x_min": 580, "y_min": 500, "x_max": 645, "y_max": 600},
         "DetermineWinnerBackup": {"x_min": 580, "y_min": 710, "x_max": 645, "y_max": 810},
         "DetermineSelfPick": {"x_min": 1650, "y_min": 400, "y_max": 1200},
@@ -61,7 +64,7 @@ class Config:
         "exit_ad": (1205, 191), "exit_ad2": (1202, 197), "exit_ad3": (1243, 141),
         "exit_ad4": (668, 604), "next_game": (893, 626), "draw_game": (618, 450),
         "x_left": (114, 168), "ad_close": (632, 437), "xx": (1013, 252),
-        "ad_skip_video": (1133, 152),"ad_play": (1068, 202),
+        "ad_skip_video": (1133, 152), "ad_play": (1068, 202),
     }
 
     ACTION_SCREEN_CLICK_ORDER = {
@@ -77,7 +80,7 @@ class Config:
         "Ad": ["xx", "x2", "x_left", "exit_ad", "x", "close_ad", "exit_ad4", "exit_ad3", "exit_ad2", "ad_close","ad_skip_video", "ad_play"],
         "Woo": ['accept'],
         "WooChow": ['accept_left'],
-        "ad_skip_video": ["ad_skip_video"],"ad_play": ["ad_play"]
+        "ad_skip_video": ["ad_skip_video"], "ad_play": ["ad_play"]
     }
 
     GAME_ACTION_SCREENS = ['YourDiscard', 'Chow', 'Pong', 'Woo', 'WooChow',
@@ -90,8 +93,7 @@ class Utils:
         if xy_search_boundaries is None:
             xy_search_boundaries = {}
 
-        xy_search_boundaries.update(
-            Config.TEMPLATE_BOUNDARY_MAP.get(screen_type, {}))
+        xy_search_boundaries.update(Config.TEMPLATE_BOUNDARY_MAP.get(screen_type, {}))
         x_min = xy_search_boundaries.get("x_min", 0)
         x_max = xy_search_boundaries.get("x_max", frame.shape[1])
         y_min = xy_search_boundaries.get("y_min", 0)
@@ -104,8 +106,7 @@ class Utils:
         png_files = (f for f in os.listdir(folder_path) if f.endswith('.png'))
 
         for template_path in png_files:
-            tg = cv2.imread(os.path.join(
-                folder_path, template_path), cv2.IMREAD_GRAYSCALE)
+            tg = cv2.imread(os.path.join(folder_path, template_path), cv2.IMREAD_GRAYSCALE)
             matched_result = cv2.matchTemplate(fg, tg, cv2.TM_CCOEFF_NORMED)
             match_found = np.any(matched_result >= threshold)
 
@@ -113,16 +114,86 @@ class Utils:
                 yloc, xloc = np.where(matched_result >= threshold)
                 msg = f'Match found with {screen_type}/{template_path}'
                 print(msg)
-                Notifier.notify(msg)
+                if screen_type not in ['GameScreen', 'YourDiscard', 'NotFullScreen', 'small_discards', 'large_discards']:
+                    Notifier.notify(msg)
                 return True, [int(min(xloc)), int(max(xloc)), int(min(yloc)), int(max(yloc)), template_path]
 
         return False, [0, 0, 0, 0, '']
 
+    @staticmethod
+    def is_new_on_screen(frame1, frame2, screen_type='small_discards', threshold=Config.DISCARD_TILE_MATCHING_THRESHOLD, overlap_threshold=10):
+
+        frame1_tiles = defaultdict(int)
+        frame2_tiles = defaultdict(int)
+
+        # Set search boundaries
+        xy_search_boundaries = {}
+        xy_search_boundaries.update(Config.TEMPLATE_BOUNDARY_MAP.get(screen_type, {}))
+        x_min = xy_search_boundaries.get("x_min", 0)
+        x_max = xy_search_boundaries.get("x_max", frame1.shape[1])
+        y_min = xy_search_boundaries.get("y_min", 0)
+        y_max = xy_search_boundaries.get("y_max", frame1.shape[0])
+
+        # Crop the frames according to the boundaries
+        f1 = frame1[y_min:y_max, x_min:x_max]
+        f2 = frame2[y_min:y_max, x_min:x_max]
+
+        # Path to the folder containing templates
+        folder_path = os.path.join(Config.TEMPLATE_PATH, screen_type)
+        png_files = (f for f in os.listdir(folder_path) if f.endswith('.png'))
+
+        for template_path in png_files:
+            # Read the template in color
+            template = cv2.imread(os.path.join(folder_path, template_path), cv2.IMREAD_COLOR)
+
+            # Perform template matching for each channel separately and then combine results
+            channels = cv2.split(template)
+            match_found1 = False
+            match_found2 = False
+
+            for i, channel_template in enumerate(channels):
+                matched_result1 = cv2.matchTemplate(f1[:, :, i], channel_template, cv2.TM_CCOEFF_NORMED)
+                matched_result2 = cv2.matchTemplate(f2[:, :, i], channel_template, cv2.TM_CCOEFF_NORMED)
+
+                # Combine results by taking the minimum value across channels (conservative match)
+                if i == 0:
+                    combined_result1 = matched_result1
+                    combined_result2 = matched_result2
+                else:
+                    combined_result1 = np.minimum(combined_result1, matched_result1)
+                    combined_result2 = np.minimum(combined_result2, matched_result2)
+
+            # Find non-overlapping matches
+            def find_non_overlapping_matches(matched_result):
+                yloc, xloc = np.where(matched_result >= threshold)
+                matches = list(zip(yloc, xloc))
+                non_overlapping_matches = []
+
+                for match in matches:
+                    if not any(np.linalg.norm(np.array(match) - np.array(prev_match)) < overlap_threshold for prev_match in non_overlapping_matches):
+                        non_overlapping_matches.append(match)
+
+                return non_overlapping_matches
+
+            non_overlapping_matches1 = find_non_overlapping_matches(combined_result1)
+            non_overlapping_matches2 = find_non_overlapping_matches(combined_result2)
+
+            if non_overlapping_matches1:
+                msg = f'Match found with {screen_type}/{template_path}'
+                print(msg)  # Optionally log the message
+                frame1_tiles[f'{template_path}'] += len(non_overlapping_matches1)
+
+            if non_overlapping_matches2:
+                msg = f'Match found with {screen_type}/{template_path}'
+                print(msg)  # Optionally log the message
+                frame2_tiles[f'{template_path}'] += len(non_overlapping_matches2)
+
+        return frame1_tiles, frame2_tiles
+
+    @staticmethod
     def chars_on_screen(frame, screen_type='DetermineFireGun2'):
         xy_search_boundaries = {}
-
-        xy_search_boundaries.update(
-            Config.TEMPLATE_BOUNDARY_MAP.get(screen_type, {}))
+        xy_search_boundaries.update(Config.TEMPLATE_BOUNDARY_MAP.get(screen_type, {}))
         x_min = xy_search_boundaries.get("x_min", 0)
         x_max = xy_search_boundaries.get("x_max", frame.shape[1])
         y_min = xy_search_boundaries.get("y_min", 0)
@@ -130,24 +201,17 @@ class Utils:
 
         f = frame[y_min:y_max, x_min:x_max]
 
-        # Convert PIL image to NumPy array
         cropped_image_np = np.array(f)
-
-        # Convert to grayscale if the image is not already
-        if len(cropped_image_np.shape) == 3:  # Check if the image has multiple channels
+        if len(cropped_image_np.shape) == 3:
             cropped_image_np = cv2.cvtColor(cropped_image_np, cv2.COLOR_RGB2GRAY)
 
-        # Find the lightest pixel (maximum value)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(cropped_image_np)
+        _, max_val, _, _ = cv2.minMaxLoc(cropped_image_np)
     
-        if max_val >= 200:
-            return True
-        return False
-        
+        return max_val >= 200
 
     @staticmethod
     def save_screenshot(frame, prefix=''):
-        ms_ts_id = int(time.time() * 1000)  # millisecond timestamp id
+        ms_ts_id = int(time.time() * 1000)
         dir_path = os.path.join(Config.SCREENSHOT_PATH, Config.TIMESTAMP)
         os.makedirs(dir_path, exist_ok=True)
         path = os.path.join(dir_path, f'{prefix}_{ms_ts_id}.png')
@@ -162,6 +226,65 @@ class Utils:
         return str(pst_dt)[0:19]
 
     @staticmethod
+    def highlight_frame_changes(frame1, frame2, threshold=20):
+        ms_ts_id = int(time.time() * 1000)
+        def preprocess(frame1, frame2):
+            frame1[0:210, :, :] = frame2[0:210, :, :] = 0
+            frame1[950:, :, :] = frame2[950:, :, :] = 0
+            frame1[1390:, :, :] = frame2[1390:, :, :] = 0
+            frame1[0:210, :, :] = frame2[0:210, :, :] = 0
+            frame1[1190:1400, 0:1170, :] = frame2[1190:1400, 0:1170, :] = 0
+            return frame1, frame2
+
+        frame1, frame2 = preprocess(frame1, frame2)
+
+        _output_path = f'{Config.SCREENSHOT_PATH}/{Config.TIMESTAMP}/DISCARD_MELD_ANALYSIS_{ms_ts_id}_frame_before.png'
+        output_path = os.path.join(_output_path)
+        cv2.imwrite(output_path, frame1)
+        print(f'frame before saved to {_output_path}')
+
+        _output_path = f'{Config.SCREENSHOT_PATH}/{Config.TIMESTAMP}/DISCARD_MELD_ANALYSIS_{ms_ts_id}_frame_after.png'
+        output_path = os.path.join(_output_path)
+        cv2.imwrite(output_path, frame2)
+        print(f'frame after saved to {_output_path}')
+
+        # Convert frames to grayscale
+        gray1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
+        gray2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+
+        # Compute the absolute difference between the frames
+        diff = cv2.absdiff(gray1, gray2)
+
+        # Threshold the difference to highlight changes
+        _, diff_thresh = cv2.threshold(diff, threshold, 255, cv2.THRESH_BINARY)
+
+        # Create a mask from the thresholded difference image
+        mask = cv2.cvtColor(diff_thresh, cv2.COLOR_GRAY2BGR)
+
+        # Highlight the changes by adding a color to the areas where changes occurred
+        highlighted_area = np.zeros_like(frame1)
+        highlighted_area[:, :] = [0, 0, 255]  # Highlight in red
+
+        # Apply the mask to the highlighted area
+        highlighted_changes = cv2.bitwise_and(highlighted_area, mask)
+
+        # Combine the original frame with the highlighted changes
+        highlighted_image = cv2.addWeighted(frame1, 0.5, highlighted_changes, 0.5, 0)
+
+
+        sd1, sd2 = Utils.is_new_on_screen(frame1, frame2, screen_type = 'small_discards')
+        ld1, ld2 = Utils.is_new_on_screen(frame1, frame2, screen_type = 'large_discards')
+
+        # Save the highlighted image
+
+        _output_path = f'{Config.SCREENSHOT_PATH}/{Config.TIMESTAMP}/DISCARD_MELD_ANALYSIS_{ms_ts_id}.png'
+        output_path = os.path.join(_output_path)
+        cv2.imwrite(output_path, highlighted_image)
+        print(f'finished saving to {_output_path}')
+
+        return sd1,sd2,ld1,ld2
+
+    @staticmethod
     def find_closest_wind(cropped_image, offset=0):
         comparison_set = set(["E", "W", "S", "N"])
 
@@ -169,39 +292,28 @@ class Utils:
         cropped_image_np = cropped_image_np[:, :, ::-1]
         gray = cv2.cvtColor(cropped_image_np, cv2.COLOR_BGR2GRAY)
 
-        _, binary_image = cv2.threshold(
-            gray, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        _, binary_image = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
         kernel = np.ones((2, 2), np.uint8)
         dilated = cv2.dilate(binary_image, kernel, iterations=1)
         eroded = cv2.erode(dilated, kernel, iterations=1)
 
-        # Improved OCR configuration
         custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-        extracted_text = pytesseract.image_to_string(
-            eroded, config=custom_config)
+        extracted_text = pytesseract.image_to_string(eroded, config=custom_config)
         letters = re.findall(r'[a-zA-Z]', extracted_text)
 
         if letters:
             detected_letter = letters[0].upper()
 
-            # Use Levenshtein distance for better accuracy
             def similarity_score(a, b):
                 return 1 - levenshtein_distance(a, b) / max(len(a), len(b))
 
-            similarities = {letter: similarity_score(
-                detected_letter, letter) for letter in comparison_set}
+            similarities = {letter: similarity_score(detected_letter, letter) for letter in comparison_set}
             likely_wind = max(similarities, key=similarities.get)
 
             if offset == 1:
-                if likely_wind == 'W':
-                    likely_wind = 'S'
-                elif likely_wind == 'S':
-                    likely_wind = 'E'
-                elif likely_wind == 'E':
-                    likely_wind = 'N'
-                elif likely_wind == 'N':
-                    likely_wind = 'W'
+                wind_map = {'W': 'S', 'S': 'E', 'E': 'N', 'N': 'W'}
+                likely_wind = wind_map.get(likely_wind, likely_wind)
 
             return likely_wind
         else:
@@ -236,6 +348,13 @@ class GameFrameQueue:
     def length(self):
         return len(self.queue)
 
+    def clear_queue(self):
+        """Clear all items in the queue."""
+        self.queue.clear()
+        msg = "Queue has been cleared"
+        print(msg)
+        Notifier.notify(msg)
+
     def __getitem__(self, index):
         if isinstance(index, int):
             if index < 0:
@@ -248,8 +367,7 @@ class GameFrameQueue:
 
     def save_screenshot(self, frame):
         ms_ts_id = int(time.time() * 1000)
-        path = os.path.join(
-            f'{Config.SCREENSHOT_PATH}/{Config.TIMESTAMP}/DAEMON_{ms_ts_id}.png')
+        path = os.path.join(f'{Config.SCREENSHOT_PATH}/{Config.TIMESTAMP}/DAEMON_{ms_ts_id}.png')
         cv2.imwrite(path, frame)
         msg = f"Screenshot saved @ DAEMON_{ms_ts_id}.png"
         print(msg)
@@ -260,37 +378,33 @@ class MotionDetector:
         self.threshold = threshold
 
     def detect(self, frame1, frame2, screen_type='WallCount'):
-        f1, f2 = frame1.copy(), frame2.copy()       # masked frames for motion capture
-        f1_, f2_ = frame1.copy(), frame2.copy()     # masked frames for screenshots
+        f1, f2 = frame1.copy(), frame2.copy()
 
         if screen_type == 'WallCount':
             f1[:1190, :] = f2[:1190, :] = 0
             f1[:, 1450:] = f2[:, 1450:] = 0
             f1[1190:1400, :1150] = f2[1190:1400, :1150] = 0
 
-            f1_[1390:, :, :] = f2_[1390:, :, :] = 0
-            f1_[0:210, :, :] = f2_[0:210, :, :] = 0
-            f1_[1190:1400, 0:1170, :] = f2_[1190:1400, 0:1170, :] = 0
+            f1[1390:, :, :] = f2[1390:, :, :] = 0
+            f1[0:210, :, :] = f2[0:210, :, :] = 0
+            f1[1190:1400, 0:1170, :] = f2[1190:1400, 0:1170, :] = 0
         elif screen_type == 'GameScreenAction':
             self.threshold = 50
             f1[0:210, :, :] = f2[0:210, :, :] = 0
             f1[950:, :, :] = f2[950:, :, :] = 0
 
-            f1_[1390:, :, :] = f2_[1390:, :, :] = 0
-            f1_[0:210, :, :] = f2_[0:210, :, :] = 0
-            f1_[1190:1400, 0:1170, :] = f2_[1190:1400, 0:1170, :] = 0
-        else:               # Ad and Unknown game screens
+            f1[1390:, :, :] = f2[1390:, :, :] = 0
+            f1[0:210, :, :] = f2[0:210, :, :] = 0
+            f1[1190:1400, 0:1170, :] = f2[1190:1400, 0:1170, :] = 0
+        else:
             self.threshold = 50
             f1[1200:], f1[:210] = 0, 0
             f2[1200:], f2[:210] = 0, 0
 
-        diff = cv2.absdiff(cv2.cvtColor(f1, cv2.COLOR_BGR2GRAY),
-                           cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY))
-        _, diff_thresh = cv2.threshold(
-            diff, self.threshold, 255, cv2.THRESH_BINARY)
-        contours, _ = cv2.findContours(
-            diff_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        return len(contours) > 0, f1_, f2_
+        diff = cv2.absdiff(cv2.cvtColor(f1, cv2.COLOR_BGR2GRAY), cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY))
+        _, diff_thresh = cv2.threshold(diff, self.threshold, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(diff_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        return len(contours) > 0, f1, f2
 
 
 class ClickMotionDetector(MotionDetector):
@@ -317,25 +431,13 @@ class GameScreenshotSaveTask(Thread):
             if is_game_frame:
                 self.game_frame_queue.enqueue(frame)
                 if self.game_frame_queue.length() > 1:
-                    detected, _, f2 = self.motion_detector.detect(
-                        self.game_frame_queue[0], self.game_frame_queue[1])
+                    detected, _, f2 = self.motion_detector.detect(self.game_frame_queue[0], self.game_frame_queue[1])
                     
                     if detected:
-                        discard_frame = self.game_frame_queue[1].copy()
-                        discard_frame[950:, :, :] = 0
-                        discard_tile_found, _dtf = Utils.is_screen(discard_frame, screen_type='discards', threshold=Config.DISCARD_TILE_MATCHING_THRESHOLD)
-                        self.game_frame_queue.save_screenshot(f2)
-                        
-                        if discard_tile_found:
-                            msg = f'{_dtf} discard tile found'
-                            print(msg)
-                            Notifier.notify(msg)
-                        else:
-                            msg = 'no discard tile found'
-                            print(msg)
-                            Notifier.notify(msg)
+                        pass
+                        # self.game_frame_queue.save_screenshot(f2)
                 elif self.game_frame_queue.length() == 1:
-                    self.game_frame_queue.save_screenshot(frame)
+                    # self.game_frame_queue.save_screenshot(frame)
             time.sleep(1 / Config.SCREENSHOT_SAMPLING_RATE_FPS)
 
 
@@ -349,9 +451,9 @@ if __name__ == "__main__":
     game_frame_queue = GameFrameQueue()
     motion_detector = MotionDetector()
     stop_event = Event()
+    your_turn_queue = GameFrameQueue()
 
-    game_screenshot_save_task = GameScreenshotSaveTask(
-        game_frame_queue, motion_detector, stop_event)
+    game_screenshot_save_task = GameScreenshotSaveTask(game_frame_queue, motion_detector, stop_event)
     game_screenshot_save_task.daemon = True
     game_screenshot_save_task.start()
 
@@ -367,8 +469,7 @@ if __name__ == "__main__":
         frame_queue.enqueue(frame)
 
         if frame_queue.length() > 1:
-            motion_detected, _, _ = motion_detector.detect(
-                frame_queue[0], frame_queue[1])
+            motion_detected, _, _ = motion_detector.detect(frame_queue[0], frame_queue[1])
             if motion_detected:
                 last_motion_time = time.time()
 
@@ -386,36 +487,32 @@ if __name__ == "__main__":
         else:
             no_motion_before = False
 
-        your_discard, _yd = Utils.is_screen(frame, screen_type='YourDiscard')
-        not_full_screen, nfs = Utils.is_screen(
-            frame, screen_type='NotFullScreen')
-        game_screen, gs = Utils.is_screen(frame, screen_type='GameScreen')
-        next_game, _ng = Utils.is_screen(frame, screen_type='NextGame')
-        ad, _a = Utils.is_screen(frame, screen_type='Ad')
+        your_discard, _ = Utils.is_screen(frame, screen_type='YourDiscard')
+        not_full_screen, _ = Utils.is_screen(frame, screen_type='NotFullScreen')
+        game_screen, _ = Utils.is_screen(frame, screen_type='GameScreen')
+        next_game, _ = Utils.is_screen(frame, screen_type='NextGame')
+        ad, _ = Utils.is_screen(frame, screen_type='Ad')
 
-        
         if not_full_screen:
             Notifier.notify('full screen not detected')
             time.sleep(5)
         elif game_screen:
             if seat_wind == 'NA':
-                st = 'DetermineSeatWind'
                 game_frame = frame.copy()
+                your_turn_queue.enqueue(game_frame)
+
+                st = 'DetermineSeatWind'
                 xxyy = Config.TEMPLATE_BOUNDARY_MAP.get(st, {})
-                cropped_image = game_frame[xxyy.get("y_min", 0):xxyy.get("y_max", 0),
-                                           xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
+                cropped_image = game_frame[xxyy.get("y_min", 0):xxyy.get("y_max", 0), xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
                 gray = Image.fromarray(cropped_image).convert('L')
-                _, binary_image = cv2.threshold(
-                    np.array(gray), 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                _, binary_image = cv2.threshold(np.array(gray), 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
                 kernel = np.ones((1, 1), np.uint8)
-                eroded = cv2.erode(cv2.dilate(
-                    binary_image, kernel, iterations=1), kernel, iterations=1)
+                eroded = cv2.erode(cv2.dilate(binary_image, kernel, iterations=1), kernel, iterations=1)
                 custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-                extracted_text = pytesseract.image_to_string(
-                    eroded, config=custom_config)
+                extracted_text = pytesseract.image_to_string(eroded, config=custom_config)
                 letters = re.findall(r'[a-zA-Z]', extracted_text)
                 letter = ''.join(letters)
-                if letter in ['N', 'W', 'S', 'E']:
+                if letter in Config.WINDS:
                     msg = f"Seat Wind - {letter}"
                     print(msg)
                     Notifier.notify(msg)
@@ -429,48 +526,79 @@ if __name__ == "__main__":
                 r, _ = Utils.is_screen(frame, screen_type=screen_type)
                 if r:
                     msg = f'game action screen {screen_type} found'
+                    your_turn_queue.enqueue(frame)
                     Notifier.notify(msg)
                     print(msg)
                     Utils.save_screenshot(frame, prefix=screen_type)
+
+                    def dict_diff(dict1, dict2):
+                        diff = {}
+
+                        for key in dict2:
+                            if key not in dict1:
+                                diff[key] = ('new tile', dict2[key])
+                            elif dict2[key] != dict1[key]:
+                                diff[key] = ('new values', dict2[key], dict1[key])
+
+                        for key in dict1:
+                            if key not in dict2:
+                                diff[key] = ('old tile', dict1[key])
+
+                        return ', '.join(f'{key}: {value}' for key, value in diff.items())
+
+                    
+                    ##### Find New Discards and Melds ######
+                    if your_turn_queue.length() == 2:
+                        sd1,sd2,ld1,ld2 = Utils.highlight_frame_changes(your_turn_queue[0], your_turn_queue[1])
+
+                        small_discards_diff = dict_diff(sd1, sd2)
+                        large_discards_diff = dict_diff(ld1, ld2)
+                        if len(small_discards_diff) > 0:
+                            msg = f"""small discards diff: {small_discards_diff}"""
+                            print(msg)
+                            Notifier.notify(msg, timeout=5)
+                            time.sleep(5)
+                        if len(large_discards_diff) > 0:
+                            msg = f"""large discards diff: {large_discards_diff}"""
+                            print(msg)
+                            Notifier.notify(msg, timeout=5)
+                            time.sleep(5)
+
+
+                    #############################################
+
+
                     for click_label in Config.ACTION_SCREEN_CLICK_ORDER[screen_type]:
                         c = Config.CLICK_COORDINATES.get(click_label, (0, 0))
                         if c == (0, 0):
-                            raise IndexError(
-                                f"{click_label} key not found in Config.CLICK_COORDINATES")
-                        md, fbc, fac = click_motion_detector.detect_after_click(
-                            c, screen_type='GameScreenAction')
+                            raise IndexError(f"{click_label} key not found in Config.CLICK_COORDINATES")
+                        md, _, _ = click_motion_detector.detect_after_click(c, screen_type='GameScreenAction')
                         if md:
                             msg = f"Motion after clicking {click_label} @ {c}"
                             print(msg)
                             Notifier.notify(msg)
-                            # Utils.save_screenshot(
-                            #     fbc, prefix=screen_type + '_before_click_')
-                            # Utils.save_screenshot(
-                            #     fac, prefix=screen_type + '_after_click_')
                             break
         elif next_game:
-            screen_type, details = 'NextGame', ''
+            screen_type = 'NextGame'
             msg = f"next game detected"
             print(msg)
             Notifier.notify(msg)
-            #######################################################
+
             st = 'DetermineWinner'
             next_game_frame = frame.copy()
             xxyy = Config.TEMPLATE_BOUNDARY_MAP.get(st, {})
-            cropped_image = next_game_frame[xxyy.get("y_min", 0):xxyy.get("y_max", 0),
-                                            xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
+            cropped_image = next_game_frame[xxyy.get("y_min", 0):xxyy.get("y_max", 0), xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
             winner_wind = Utils.find_closest_wind(cropped_image)
 
             if winner_wind == 'NA':
                 msg = 'WARNING: Winner wind not found'
                 print(msg)
                 Notifier.notify(msg)
-                #######################################################
+
                 st = 'DetermineWinnerBackup'
                 next_game_frame = frame.copy()
                 xxyy = Config.TEMPLATE_BOUNDARY_MAP.get(st, {})
-                cropped_image = next_game_frame[xxyy.get("y_min", 0):xxyy.get("y_max", 0),
-                                                xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
+                cropped_image = next_game_frame[xxyy.get("y_min", 0):xxyy.get("y_max", 0), xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
                 winner_wind = Utils.find_closest_wind(cropped_image, offset=1)
                 if winner_wind == 'NA':
                     msg = 'WARNING: Winner wind still not found after DetermineWinnerBackup'
@@ -479,11 +607,11 @@ if __name__ == "__main__":
             msg = f'winner wind = {winner_wind}'
             print(msg)
             Notifier.notify(msg)
-            details += f'_winner_{winner_wind}'
+            details = f'_winner_{winner_wind}'
 
             if seat_wind == 'NA':
                 Notifier.notify('WARNING: no seat wind recorded and winner cannot be determined')
-            elif seat_wind != 'NA' and seat_wind == winner_wind:
+            elif seat_wind == winner_wind:
                 details += f'_WINNER'
                 msg = 'You won the round!'
             else:
@@ -493,79 +621,46 @@ if __name__ == "__main__":
 
             details += f'_seatwind_{seat_wind}'
 
-            
-            #######################################################
-
             def determine_total_fan():
                 st = 'DetermineWinnerFan'
                 next_game_frame = frame.copy()
                 xxyy = Config.TEMPLATE_BOUNDARY_MAP.get(st, {})
-                cropped_image = next_game_frame[xxyy.get("y_min", 0):xxyy.get("y_max", 0),
-                                                xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
-                cropped_image = Image.fromarray(cropped_image).convert('L').filter(
-                    ImageFilter.MedianFilter()).point(lambda p: p > 128 and 255)
+                cropped_image = next_game_frame[xxyy.get("y_min", 0):xxyy.get("y_max", 0), xxyy.get("x_min", 0):xxyy.get("x_max", 0)]
+                cropped_image = Image.fromarray(cropped_image).convert('L').filter(ImageFilter.MedianFilter()).point(lambda p: p > 128 and 255)
                 base_width = 1000
                 w_percent = (base_width / float(cropped_image.size[0]))
                 h_size = int((float(cropped_image.size[1]) * float(w_percent)))
-                cropped_image = cropped_image.resize(
-                    (base_width, h_size), Image.LANCZOS)
+                cropped_image = cropped_image.resize((base_width, h_size), Image.LANCZOS)
                 custom_config = r'--oem 3 --psm 6'
-                extracted_text = pytesseract.image_to_string(
-                    cropped_image, config=custom_config)
-                match = re.search(r'Total\s*Fan\s*(\d+)',
-                                  extracted_text, re.IGNORECASE)
-                return match
+                extracted_text = pytesseract.image_to_string(cropped_image, config=custom_config)
+                return re.search(r'Total\s*Fan\s*(\d+)', extracted_text, re.IGNORECASE)
 
-            # Retry mechanism
-            attempts = 2
-            for attempt in range(attempts):
+            for _ in range(2):
                 match = determine_total_fan()
                 if match:
                     total_fan_number = match.group(1)
                     msg = f"Total Fan Number: {total_fan_number}"
                     print(msg)
                     Notifier.notify(msg)
-                    details += ''.join(['_', str(total_fan_number), 'Fan'])
+                    details += f'_{total_fan_number}Fan'
                     break
                 else:
-                    if attempt < attempts - 1:
-                        print('WARNING: Total Fan not found, retrying...')
-                    else:
-                        msg = 'WARNING: Total Fan cannot be found.'
-                        print(msg)
-                        Notifier.notify(msg)
-                        details += '_NoFanFound'
-            ############################################################
+                    print('WARNING: Total Fan not found, retrying...')
+                    details += '_NoFanFound'
+
             st = 'DetermineSelfPick'
             r, _ = Utils.is_screen(frame, screen_type=st)
-            if r:    
-                details += '_selfpick'
-            else:
-                details += '_discardwin'
-                ############################################################
-                # Firegun analysis
-                if seat_wind in Config.WINDS and winner_wind in Config.WINDS:
-                    if winner_wind == 'E':
-                        wind_order = 'SWN'
-                    elif winner_wind == 'S':
-                        wind_order = 'WNE'
-                    elif winner_wind == 'N':
-                        wind_order = 'ESW'
-                    elif winner_wind == 'W':
-                        wind_order = 'NES'
-                  
-                    Notifier.notify(f'wind order = {wind_order}')
+            details += '_selfpick' if r else '_discardwin'
 
-                    has_chars_on_screen = [False, False, False]
-                    firegunner = 'NA'
-                    for i, st in enumerate(['DetermineFireGun2', 'DetermineFireGun3', 'DetermineFireGun4']):
-                        has_chars_on_screen[i] = Utils.chars_on_screen(frame, screen_type=st)
+            if seat_wind in Config.WINDS and winner_wind in Config.WINDS:
+                wind_order_map = {'E': 'SWN', 'S': 'WNE', 'N': 'ESW', 'W': 'NES'}
+                wind_order = wind_order_map.get(winner_wind, '')
+                Notifier.notify(f'wind order = {wind_order}')
 
-                    if sum(has_chars_on_screen) == 1:
-                        true_index = has_chars_on_screen.index(True)
-                        msg = f'true index = {true_index}'
-                        firegunner = wind_order[true_index]
-                        details += f'_firegun_{firegunner}'
+                has_chars_on_screen = [Utils.chars_on_screen(frame, screen_type=st) for st in ['DetermineFireGun2', 'DetermineFireGun3', 'DetermineFireGun4']]
+                if sum(has_chars_on_screen) == 1:
+                    firegunner = wind_order[has_chars_on_screen.index(True)]
+                    details += f'_firegun_{firegunner}'
                     
                     if seat_wind == firegunner:
                         msg = f'You are detected as firegun!'
@@ -573,42 +668,26 @@ if __name__ == "__main__":
                         print(msg)
                         details += '_FIREGUN'
                     
-                else:
-                    msg = f'WARNING: seat_wind {seat_wind} and/or winner_wind {winner_wind} is invalid, cannot properly determine firegunner '
-                    print(msg)
-                    Notifier.notify(msg)
-            
             msg = f'details = {details}'
             Notifier.notify(msg)
-
 
             Utils.save_screenshot(frame, prefix=screen_type + details)
             for click_label in Config.ACTION_SCREEN_CLICK_ORDER[screen_type]:
                 c = Config.CLICK_COORDINATES.get(click_label, (0, 0))
                 if c == (0, 0):
                     raise IndexError(f"{click_label} key not found")
-                md, fbc, fac = click_motion_detector.detect_after_click(
-                    c, screen_type=screen_type)
+                md, _, _ = click_motion_detector.detect_after_click(c, screen_type=screen_type)
                 if md:
                     msg = f"Motion after clicking {click_label} @ {c}"
                     last_motion_time = time.time()
                     print(msg)
-                    # Notifier.notify(msg)
-                    #Utils.save_screenshot(
-                        #fbc, prefix=screen_type + '_before_click_')
-                    #Utils.save_screenshot(
-                        #fac, prefix=screen_type + '_after_click_')
                     break
             seat_wind = 'NA'
             wind_order = 'NA'
+            your_turn_queue.clear_queue()
 
         elif ad:
-            if _a[4] == 'ad_skip_video.png':
-                screen_type = 'ad_skip_video'
-            elif _a[4] == 'ad_play.png':
-                screen_type = 'ad_play'
-            else:
-                screen_type = 'Ad'
+            screen_type = 'ad_skip_video' if _[4] == 'ad_skip_video.png' else 'ad_play' if _[4] == 'ad_play.png' else 'Ad'
             msg = f"{screen_type} detected"
             print(msg)
             Notifier.notify(msg)
@@ -616,19 +695,13 @@ if __name__ == "__main__":
             for click_label in Config.ACTION_SCREEN_CLICK_ORDER[screen_type]:
                 c = Config.CLICK_COORDINATES.get(click_label, (0, 0))
                 if c == (0, 0):
-                    raise IndexError(
-                        f"{click_label} key not found in Config.CLICK_COORDINATES")
-                md, fbc, fac = click_motion_detector.detect_after_click(
-                    c, screen_type=screen_type)
+                    raise IndexError(f"{click_label} key not found in Config.CLICK_COORDINATES")
+                md, _, _ = click_motion_detector.detect_after_click(c, screen_type=screen_type)
                 if md:
                     msg = f"Motion detected after clicking {click_label} @ {c}"
                     last_motion_time = time.time()
                     print(msg)
                     Notifier.notify(msg)
-                    # Utils.save_screenshot(
-                    #     fbc, prefix=screen_type + '_before_click_')
-                    # Utils.save_screenshot(
-                    #     fac, prefix=screen_type + '_after_click_')
                     break
         else:
             screen_type = 'Unknown'
