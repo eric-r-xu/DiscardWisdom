@@ -5,11 +5,20 @@
 #### 1. Start the Python Script
 Open a terminal window and run:
 ```zsh
-version=17; cd /Users/ericxu/Documents/Jupyter/mahjong; conda activate myenv; ts=$(date +%s); python autoplay_v${version}.py 2>&1 | tee logs/log_$ts.txt
-
-# to run in background, use this instead
-version=17; cd /Users/ericxu/Documents/Jupyter/mahjong; conda activate myenv; ts=$(date +%s); nohup python autoplay_v${version}.py 2>&1 | tee logs/log_$ts.txt &
+version=21
+cd /Users/ericxu/Documents/Jupyter/mahjong
+conda activate myenv
+python autoplay_v${version}.py
 ```
+
+With profiler to debug performance issues
+```zsh
+version=20
+cd /Users/ericxu/Documents/Jupyter/mahjong
+conda activate myenv
+python -m cProfile -s cumtime autoplay_v${version}.py
+```
+
 
 #### 2. Start the Mahjong Game
 On an Android device (tested on Google Pixel 8 Pro), open the [Hong Kong Mahjong Club App](https://play.google.com/store/apps/details?id=com.pvella.mahjong&hl=en_US) and start a game.
