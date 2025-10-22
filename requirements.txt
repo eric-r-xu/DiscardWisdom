@@ -1,0 +1,11 @@
+numpy
+pillow
+pytz
+opencv-python          
+pytesseract
+python-Levenshtein
+pyautogui
+rich                   
+adbutils               
+uiautomator2
+pandas

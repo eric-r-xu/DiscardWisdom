@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: RiichiDiscardWisdom
+Version: 0.1.0
+Summary: Unified CLI for Riichi discard: Efficiency (best) and Defense (safest)
+Author: Code Copilot
+Requires-Python: >=3.9
