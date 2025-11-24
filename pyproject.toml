@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "RiichiDiscardWisdom"
+version = "0.1.0"
+requires-python = ">=3.9"
+description = "Unified CLI for Riichi discard: Efficiency (best) and Defense (safest)"
+authors = [{name="Code Copilot"}]
+
+[project.scripts]
+efficiency = "riichi_discard_wisdom.cli_efficiency:main"
+defense = "riichi_discard_wisdom.cli_defense:main"
+
+# NEW: tell setuptools how to discover packages
+[tool.setuptools.packages.find]
+include = ["riichi_discard_wisdom*"]
+exclude = ["tileTemplates", "tileTemplates.*"]
+
+# If you want to ship files from tileTemplates INSIDE the package,
+# move that folder under riichi_discard_wisdom/ and then use:
+# [tool.setuptools.package-data]
+# riichi_discard_wisdom = ["tileTemplates/**"]
+
+[tool.pytest.ini_options]
+addopts = "-q"

@@ -1,0 +1,3 @@
+[console_scripts]
+defense = riichi_discard_wisdom.cli_defense:main
+efficiency = riichi_discard_wisdom.cli_efficiency:main
