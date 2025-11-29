@@ -1,39 +1,60 @@
 import cv2
 import numpy as np
+import os
 import io
-from IPython.display import display
-import PIL.Image as Image
+import pyautogui
 
-def show_image(img, scale):
-    resized_img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    is_success, buffer = cv2.imencode(".png", resized_img)
-    if not is_success:
-        raise ValueError("Failed to convert the image to PNG buffer")
-    io_buf = io.BytesIO(buffer)
-    display(Image.open(io_buf))
 
 def init_screenshot(image_path):
-    width, height = 2778, 1284
-    image = cv2.imread(image_path)
-    if image is None:
-        raise ValueError("Error: Could not read the target image.")
-    resized_image = cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
-    mask = np.zeros((height, width), dtype=bool)
-    return resized_image, mask
+    shot = pyautogui.screenshot()  # PIL Image (RGB)
+    shot.save(image_path)
 
-def find_and_mark_locations(template_image, image, overlay, match_mask):
-    image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    original_template_gray = cv2.cvtColor(template_image, cv2.COLOR_BGR2GRAY)
-    threshold = 0.8
-    locations = 0
-    resized_template = original_template_gray
-    result = cv2.matchTemplate(image_gray, resized_template, cv2.TM_CCOEFF_NORMED)
+    image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    if image is None:
+        raise ValueError(f"Error: Could not read the saved screenshot at {image_path}")
+
+    height, width = image.shape[:2]
+    mask = np.zeros((height, width), dtype=bool)
+    return image, mask
+
+
+def init_screenshot(image_path):
+    shot = pyautogui.screenshot() 
+    shot.save(image_path)
+
+    image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    if image is None:
+        raise ValueError(f"Error: Could not read the saved screenshot at {image_path}")
+
+    height, width = image.shape[:2]
+    mask = np.zeros((height, width), dtype=bool)
+    return image, mask
+
+
+def find_num_locations_and_all_locations(template_image, image, mask, threshold = 0.8):
+    num_locations = 0
+    all_locations = []
+    result = cv2.matchTemplate(image, template_image, cv2.TM_CCOEFF_NORMED)
     matches = np.where(result >= threshold)
     for y, x in zip(*matches):
-        end_y, end_x = y + resized_template.shape[0], x + resized_template.shape[1]
-        if np.any(match_mask[y:end_y, x:end_x]):
+        end_y, end_x = y + template_image.shape[0], x + template_image.shape[1]
+        if np.any(mask[y:end_y, x:end_x]):
             continue
-        match_mask[y:end_y, x:end_x] = True
-        cv2.rectangle(overlay, (x, y), (end_x, end_y), (0, 255, 255), -1)
-        locations += 1
-    return locations
+        mask[y:end_y, x:end_x] = True
+        all_locations.append([x, end_x, y, end_y])
+        num_locations += 1
+
+    return [num_locations, all_locations]
+
+
+
+def return_first_match_location(template_image, image, threshold = 0.8):
+    first_match_location = []
+    result = cv2.matchTemplate(image, template_image, cv2.TM_CCOEFF_NORMED)
+    matches = np.where(result >= threshold)
+    first_match_location = []
+    for y, x in zip(*matches):
+        end_y, end_x = y + template_image.shape[0], x + template_image.shape[1]
+        first_match_location = [x, end_x, y, end_y]
+        return first_match_location
+    return first_match_location
